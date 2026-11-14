@@ -1,12 +1,13 @@
 // ShowMe agent: answers the seller's FaceTime call, shows challenge cards on its own video,
 // speaks each one, grabs the caller's frames and sends them to vision/ for a verdict.
 //
-// Env (.env.local): LIVEKIT_*, OPENAI_API_KEY, AGENT_NAME, VISION_URL, AGENT_KEY, MOCK_VISION=1 to skip vision.
+// Env (.env.local): LIVEKIT_*, GOOGLE_API_KEY (Gemini voice; VOICE=openai + OPENAI_API_KEY to fall back), AGENT_NAME, VISION_URL, AGENT_KEY, MOCK_VISION=1 to skip vision.
 // PROBE_FRAMES=1 saves the first 3 caller frames to probe/ (Gate 1: can we see the caller's camera?).
 // START_WITHOUT_BRIDGE=1 starts the flow as soon as a caller joins (plain LiveKit room, no FaceTime).
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { AutoSubscribe, defineAgent, voice } from '@livekit/agents';
+import * as google from '@livekit/agents-plugin-google';
 import * as openai from '@livekit/agents-plugin-openai';
 import { LocalVideoTrack, TrackSource, VideoBufferType, VideoFrame, VideoSource } from '@livekit/rtc-node';
 import { FPS, HEIGHT, WIDTH, renderCard, withPulse } from './card.mjs';
@@ -53,10 +54,16 @@ const agent = defineAgent({
     const timer = setInterval(sendFrame, 1000 / FPS);
 
     // Voice: speech-to-text to hear the code, text-to-speech for scripted lines. No LLM, so it never improvises.
-    const session = new voice.AgentSession({
-      stt: new openai.STT({ model: 'gpt-4o-mini-transcribe', useRealtime: true, language: 'en', prompt: 'The caller reads a 4-digit code, like 4 8 2 7.' }),
-      tts: new openai.TTS({ model: 'gpt-4o-mini-tts', voice: 'coral' }),
-    });
+    // Gemini by default; VOICE=openai is the fallback if Gemini's beta STT/TTS misbehaves.
+    const session = new voice.AgentSession(process.env.VOICE === 'openai'
+      ? {
+        stt: new openai.STT({ model: 'gpt-4o-mini-transcribe', useRealtime: true, language: 'en', prompt: 'The caller reads a 4-digit code, like 4 8 2 7.' }),
+        tts: new openai.TTS({ model: 'gpt-4o-mini-tts', voice: 'coral' }),
+      }
+      : {
+        stt: new google.beta.GeminiSTT({ language: 'en-US', customVocabulary: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] }),
+        tts: new google.beta.TTS({ voiceName: 'Kore', instructions: 'Speak clearly and calmly, like a friendly inspector.' }),
+      });
     const codeWaiters = new Set();
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, ev => {
       if (!ev.isFinal) return;

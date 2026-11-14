@@ -132,7 +132,7 @@ Track the minutes on the `#minutes` line at the bottom of this file after every 
 | Mahir + Claude | Create the `showme/` repo (section 4) with the contract, `shared/tests.json`, `shared/mock_request.json`, `.gitignore`, `.env.example` and `CLAUDE.md`. Push it and add both teammates | Teammates have cloned it |
 | Wan | Claim the GoDaddy Registry domain through the MLH code (for example `showmelive.<tld>`), create the Vultr account, start a Rocky Linux instance, and set up Vite + React in `web/` | The domain resolves, and SSH to the box works |
 | Youngjun | Get the Gemini key (check its rate limit; turn on billing if the free tier allows under 1 request per second) and create the MongoDB Atlas free cluster | A Python one-liner gets a Gemini reply and writes to Atlas |
-| Mahir | ElevenLabs Starter ($1 for the first month), and pick one calm voice. Also get an OpenAI API key: the Chert starter's speech-to-text uses it to hear the spoken code (a few cents) | Both keys exist |
+| Mahir | ElevenLabs Starter ($1 for the first month), and pick one calm voice. Also get a Gemini key (aistudio.google.com/apikey) for the agent's speech-to-text and voice | Both keys exist |
 | Everyone | **Keys are shared by DM only**, each goes into a local `.env`, and nothing is committed | `git grep -i "api_key="` finds only `.env.example` |
 
 **Estimated spend:** ElevenLabs $1, Gemini under $10, Vultr credit and the domain through MLH.
