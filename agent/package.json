@@ -1,0 +1,23 @@
+{
+  "name": "showme-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.23.2 || ^24.0.0 || ^26.0.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env.local agent.mjs start",
+    "check": "for f in *.mjs; do node --check $f || exit 1; done",
+    "help": "node agent.mjs --help",
+    "test": "node --test test/agent.test.mjs",
+    "start:probe": "PROBE_FRAMES=1 node --env-file=.env.local agent.mjs start",
+    "start:room": "START_WITHOUT_BRIDGE=1 node --env-file=.env.local agent.mjs dev"
+  },
+  "dependencies": {
+    "@livekit/agents": "1.8.0",
+    "@livekit/agents-plugin-openai": "1.8.0",
+    "@livekit/rtc-node": "0.13.35",
+    "@napi-rs/canvas": "^0.1.65"
+  }
+}
