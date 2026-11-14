@@ -159,7 +159,7 @@ export default function NewCheck() {
           <fieldset disabled={stale}>
             <div className="flex items-end justify-between gap-3">
               <legend className="min-w-0 text-sm font-medium">
-                Tests for <span className="break-words">{suggestedFor}</span>
+                Tests for <span className="wrap-break-word">{suggestedFor}</span>
                 <span className="block text-xs font-normal text-faint">
                   {CATEGORY_LABEL[suggestion.category] ?? suggestion.category} ·{' '}
                   {suggestion.source === 'gemini' ? 'picked by Gemini' : 'standard list (AI suggestions unavailable)'}
@@ -193,7 +193,7 @@ export default function NewCheck() {
                       className="mt-0.5 size-5 shrink-0 accent-ink"
                     />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-2 font-medium break-words">
+                      <span className="flex items-center gap-2 font-medium wrap-break-word">
                         {t.label}
                         {fresh.has(t.id) && (
                           <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
@@ -201,7 +201,7 @@ export default function NewCheck() {
                           </span>
                         )}
                       </span>
-                      <span className="block text-sm text-muted break-words">{t.prompt}</span>
+                      <span className="block text-sm text-muted wrap-break-word">{t.prompt}</span>
                     </span>
                   </label>
                 </li>
@@ -270,7 +270,7 @@ function TestSkeleton({ itemName }: { itemName: string }) {
   return (
     <div className="mt-6" role="status">
       <p className="text-sm text-muted">
-        Picking the best tests for <span className="font-medium text-ink break-words">{itemName}</span>…
+        Picking the best tests for <span className="font-medium text-ink wrap-break-word">{itemName}</span>…
       </p>
       <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line bg-card">
         {Array.from({ length: 6 }, (_, i) => (

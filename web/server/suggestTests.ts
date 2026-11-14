@@ -48,6 +48,8 @@ Rules:
 - Prefer tests that expose common scams or defects for this specific product
   (model/serial or About screens, activation or account locks, battery health,
   visible damage, the key functions people buy it for).
+- If the product can be locked to an owner account (iCloud/Find My, Google FRP, Nintendo/PSN/Xbox
+  account, Apple ID on a Mac), one test MUST show that lock is off, unless the buyer already kept one.
 - No tests that need tools, a second person, sound only, or showing private data in full.
 - "label": 2-4 words. "prompt": one short instruction spoken to the seller.
   "expect": what the frames must clearly show for a pass.
@@ -188,6 +190,8 @@ export function suggestTestsDev(opts: { apiKey?: string; model: string; catalogP
               responseJsonSchema: schemaFor(r.count),
               temperature: r.keep.length || r.exclude.length ? 0.7 : 0.4,
               abortSignal: AbortSignal.timeout(TIMEOUT_MS),
+              // Picking tests needs no deep reasoning; thinking off cuts latency a lot on Flash.
+              ...(opts.model.includes('flash') && { thinkingConfig: { thinkingBudget: 0 } }),
             },
           })
           const out = clean(JSON.parse(result.text ?? '{}'), r)

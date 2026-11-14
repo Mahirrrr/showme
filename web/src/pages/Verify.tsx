@@ -4,7 +4,7 @@ import { CATEGORY_LABEL, formatLine, formatWhen } from '../lib/format'
 import { bannerFor, type BannerTone } from '../lib/report'
 import { useRequestPoll } from '../lib/useRequestPoll'
 import type { CheckResult, RequestView } from '../types'
-import { buttonPrimary, Card, Page, Spinner, VerdictBadge } from '../components/ui'
+import { buttonPrimary, buttonSecondary, Card, Page, Spinner, VerdictBadge } from '../components/ui'
 
 // One URL for buyer and seller: the page changes by status, not by who is looking.
 export default function Verify() {
@@ -49,7 +49,7 @@ function ItemHeader({ view, eyebrow }: { view: RequestView; eyebrow: ReactNode }
   return (
     <div className="mb-5 mt-2">
       <div className="mb-2 text-sm font-medium text-muted">{eyebrow}</div>
-      <h1 className="text-[28px] leading-tight font-semibold tracking-tight break-words">{view.item_name}</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-tight wrap-break-word">{view.item_name}</h1>
       <p className="mt-1 text-sm text-muted">
         {CATEGORY_LABEL[view.category] ?? view.category}
         {view.listing_url && (
@@ -118,9 +118,14 @@ function Awaiting({ view }: { view: RequestView }) {
         </Card>
       )}
 
-      <p className="mt-5 text-center text-sm text-muted">
-        Buyer? Keep this page open. It turns into the live report.
-      </p>
+      <div className="mt-6 rounded-2xl border border-dashed border-line p-4 text-center">
+        <p className="text-sm text-muted">Buyer? Keep this page open. It turns into the live report.</p>
+        {view.code && (
+          <a href={watchSmsHref(view.line_number, view.code)} className={`${buttonSecondary} mt-3`}>
+            <MessageIcon /> Text me the result
+          </a>
+        )}
+      </div>
     </>
   )
 }
@@ -210,17 +215,17 @@ function ResultRow({ r }: { r: CheckResult }) {
           src={r.thumb_url}
           alt=""
           loading="lazy"
-          className="size-[72px] shrink-0 rounded-xl bg-page object-cover"
+          className="size-18 shrink-0 rounded-xl bg-page object-cover"
         />
       ) : (
-        <div className="size-[72px] shrink-0 rounded-xl bg-page" />
+        <div className="size-18 shrink-0 rounded-xl bg-page" />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 text-[15px] leading-snug font-medium break-words">{r.prompt}</p>
+          <p className="min-w-0 text-[15px] leading-snug font-medium wrap-break-word">{r.prompt}</p>
           <VerdictBadge verdict={r.result} />
         </div>
-        <p className="mt-1 text-sm leading-snug text-muted break-words">{r.reason}</p>
+        <p className="mt-1 text-sm leading-snug text-muted wrap-break-word">{r.reason}</p>
         <p className="mt-1.5 text-xs text-faint">
           {r.kind === 'liveness' ? 'Surprise check' : r.kind === 'custom' ? "Buyer's own test" : 'Buyer test'}
           {r.attempts > 1 && ` · ${r.attempts} tries`}
@@ -236,6 +241,23 @@ function Message({ title, body }: { title: string; body: string }) {
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="mx-auto mt-2 max-w-xs text-muted">{body}</p>
     </div>
+  )
+}
+
+/**
+ * Opens Messages to the ShowMe line with "WATCH <code>" typed in. The agent
+ * (agent/src/imessage.mjs) replies with the verdict when the call finishes.
+ * "?&body=" works on both iOS (wants &body) and Android (wants ?body).
+ */
+function watchSmsHref(line: string, code: string) {
+  return `sms:${line}?&body=${encodeURIComponent(`WATCH ${code}`)}`
+}
+
+function MessageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="currentColor" aria-hidden>
+      <path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.6 1.4 4.9 3.6 6.5-.2 1.2-.8 2.4-1.8 3.3 0 0 2.9.1 5.1-1.6 1 .3 2 .4 3.1.4 5.5 0 10-3.8 10-8.6S17.5 3 12 3Z" />
+    </svg>
   )
 }
 
