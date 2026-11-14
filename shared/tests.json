@@ -1,0 +1,29 @@
+{
+  "console": [
+    {"id": "power_on",    "label": "Power on",              "prompt": "Turn it on and show the screen or power light",         "expect": "device visibly powered on"},
+    {"id": "launch_game", "label": "Launch a game",         "prompt": "Start a game and show it running on screen",            "expect": "a game running on the display"},
+    {"id": "buttons",     "label": "Press every button",    "prompt": "Press each button while the screen shows it responding", "expect": "on-screen response to button presses"},
+    {"id": "serial",      "label": "Show the serial label", "prompt": "Show the serial number label up close",                 "expect": "a readable serial label"},
+    {"id": "all_sides",   "label": "Show all sides",        "prompt": "Turn it slowly to show every side",                     "expect": "all sides, no major damage hidden"}
+  ],
+  "phone": [
+    {"id": "power_on",            "label": "Power on",             "prompt": "Turn the phone on and show the lock screen",                    "expect": "phone visibly powered on"},
+    {"id": "about_screen",        "label": "Model and storage",    "prompt": "Open Settings, then About, and show the model and storage",     "expect": "an About screen with model and storage visible"},
+    {"id": "battery_health",      "label": "Battery health",       "prompt": "Open Settings, then Battery, then Battery Health, and show it", "expect": "a battery health percentage on screen"},
+    {"id": "imei",                "label": "IMEI",                 "prompt": "Dial *#06# and show the IMEI on screen",                       "expect": "an IMEI number displayed"},
+    {"id": "screen_no_cracks",    "label": "Screen has no cracks", "prompt": "Show the screen at an angle under light, edge to edge",        "expect": "a screen with no visible cracks"},
+    {"id": "apple_id_signed_out", "label": "Account signed out",   "prompt": "Open Settings and show that no account is signed in at the top","expect": "no Apple ID or Google account shown as signed in"}
+  ],
+  "laptop": [
+    {"id": "power_on",              "label": "Power on",              "prompt": "Turn it on and show it booting or at the login screen", "expect": "laptop visibly powered on"},
+    {"id": "about_screen",          "label": "Model and specs",       "prompt": "Open About This Mac or System Information and show it", "expect": "a system info screen with model and specs"},
+    {"id": "keyboard",              "label": "Keyboard works",        "prompt": "Open a text box and type the alphabet",                 "expect": "typed letters appearing on screen"},
+    {"id": "screen_no_dead_pixels", "label": "No dead pixels",        "prompt": "Show a full white screen, then a full black screen",    "expect": "an even screen with no dead pixels or lines"},
+    {"id": "all_sides",             "label": "Show all sides",        "prompt": "Close the lid and turn it slowly to show every side",   "expect": "all sides, no major damage hidden"}
+  ],
+  "other": [
+    {"id": "power_on",  "label": "Power on",              "prompt": "Turn it on and show that it works",       "expect": "device visibly powered on or working"},
+    {"id": "serial",    "label": "Show the serial label", "prompt": "Show the serial number or model label",   "expect": "a readable serial or model label"},
+    {"id": "all_sides", "label": "Show all sides",        "prompt": "Turn it slowly to show every side",       "expect": "all sides, no major damage hidden"}
+  ]
+}
