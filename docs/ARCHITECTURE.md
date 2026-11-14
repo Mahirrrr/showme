@@ -31,7 +31,7 @@ flowchart LR
   G["Gemini API<br/>(checks each challenge)"]
   M["MongoDB Atlas<br/>(requests + results)"]
   E["ElevenLabs<br/>(agent voice)"]
-  O["Gemini STT + TTS<br/>(hears the spoken code, speaks the lines)"]
+  O["Gemini STT + ElevenLabs TTS<br/>(hears the spoken code, speaks the lines)"]
 
   B -- "create request, watch report" --> W
   S -- "opens link" --> W
@@ -313,7 +313,7 @@ flowchart TB
 | `MOCK` | vision | `1`: in-memory store and canned results |
 | `VISION_URL` | agent | `https://<domain>/api`, or `http://localhost:8000/api` when developing |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | agent | From the Chert starter setup |
-| `GOOGLE_API_KEY` | agent | Gemini speech-to-text (spoken code) and voice. `VOICE=openai` + `OPENAI_API_KEY` is the fallback |
+| `GOOGLE_API_KEY` | agent | Gemini speech-to-text (spoken code). Voice is ElevenLabs. `VOICE=openai` + `OPENAI_API_KEY` is the fallback for both |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | agent | Agent voice |
 | `CHERT_API_KEY`, `CHERT_PROJECT_ID` | agent | Only for the iMessage `WATCH` extra |
 | `MOCK_VISION` | agent | `1`: skip HTTP and use canned results |

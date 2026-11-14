@@ -23,6 +23,6 @@ npm start                # or: npm run start:probe  (saves 3 caller frames to pr
 ```bash
 npx --yes @trychert/facetime@0.1.0-beta.21 dev
 ```
-Then FaceTime the line (Video). `.env.local` needs the LiveKit keys and `GOOGLE_API_KEY` (Gemini voice); `MOCK_VISION=1` until `vision/` is up.
+Then FaceTime the line (Video). `.env.local` needs the LiveKit keys, `GOOGLE_API_KEY` (Gemini speech-to-text) and `ELEVENLABS_API_KEY` (voice); `MOCK_VISION=1` until `vision/` is up.
 
 Plain LiveKit room without FaceTime minutes: `npm run start:room`, then join the room from the LiveKit Agents Playground with a webcam.

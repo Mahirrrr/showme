@@ -460,4 +460,6 @@ POST /agent/requests/{id}/abort       → { ok }   (the call dropped before fini
 
 ## Minutes used (update after every real FaceTime call)
 
-`#minutes`: 0 / 50 used.
+`#minutes`: about 2 / 50 used (47 left per `chert doctor` before the call).
+
+- **5:45 PM, call 1 (Gate 1 probe):** caller video arrives as 1280x720 frames from `chert-bridge-<id>`. **Gate 2 = Plan A (live video).** The feed is the Mac's FaceTime **window**, not the raw camera: the picture is a portrait strip at about x 64 to 544, with FaceTime's UI on top, including the **caller's phone number** in the top bar. `vision/` must crop to that strip and cut the top bar before any thumbnail is saved (privacy rule). Gemini STT heard "4827" correctly. Gemini TTS failed: the free tier allows 10 TTS requests per day, so the voice moves to ElevenLabs (M9 pulled forward).
