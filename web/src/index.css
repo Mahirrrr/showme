@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* Design tokens: every color the app uses lives here. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-ink: #0b0d12;
+  --color-muted: #5b6270;
+  --color-faint: #8b919c;
+  --color-line: #e6e8ec;
+  --color-page: #f6f7f9;
+  --color-card: #ffffff;
+
+  --color-accent: #1f5bff;
+  --color-accent-ink: #ffffff;
+
+  --color-pass: #0f7b4f;
+  --color-pass-soft: #e5f5ec;
+  --color-fail: #c42b2b;
+  --color-fail-soft: #fde8e8;
+  --color-unv: #9a5b00;
+  --color-unv-soft: #fdf1dc;
+
+  --animate-row-in: row-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-live-dot: live-dot 1.6s ease-in-out infinite;
+
+  @keyframes row-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes live-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--color-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 16px inputs stop iOS from zooming the page on focus */
+  input, select, textarea, button { font: inherit; }
+  input, select, textarea { font-size: 16px; }
+  button, a { touch-action: manipulation; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
