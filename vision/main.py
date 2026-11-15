@@ -117,7 +117,8 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
             raise RuntimeError('Live mode requires MONGODB_URI and GEMINI_API_KEY; use MOCK=1 for offline work')
         app.state.store = store if store is not None else (MemoryStore() if settings.mock else await run_in_threadpool(MongoStore, settings.mongodb_uri, settings.mongodb_database))
         app.state.checker = checker if checker is not None else (MockChecker(settings.mock_result) if settings.mock else GeminiChecker(settings))
-        app.state.suggester = suggester if suggester is not None else (None if settings.mock else GeminiSuggester(settings))
+        # Suggestions only need a Gemini key (no frames, no DB), so they work in MOCK=1 too when a key is set.
+        app.state.suggester = suggester if suggester is not None else (GeminiSuggester(settings) if settings.gemini_api_key else None)
         app.state.settings = settings
         if settings.mock and store is None:
             seed_mock(app.state.store)

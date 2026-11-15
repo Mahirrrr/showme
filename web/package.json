@@ -17,7 +17,6 @@
     "react-router-dom": "^7.18.5"
   },
   "devDependencies": {
-    "@google/genai": "^3.3.0",
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",

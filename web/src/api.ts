@@ -2,7 +2,7 @@
 // VITE_MOCK=1 serves shared/mock_request.json instead of fetching.
 //   /v/<token>?state=awaiting_seller|in_call|complete|complete_recording|expired
 //   /v/<token>?state=demo   plays awaiting -> in_call (results tick in) -> complete
-//   Test suggestions always hit /api/tests/suggest (the dev server answers it with Gemini).
+//   Test suggestions always hit /api/tests/suggest on vision/ (Gemini when it has a key).
 import { catalog, guessCategory } from './lib/catalog'
 import type {
   CreateRequestBody,
@@ -52,7 +52,7 @@ export interface CreateResult extends CreateResponse {
  * Sends full test objects (proposed contract v4). Until vision/ accepts them it
  * answers 422; then we retry once with the category's standard test ids (v3)
  * and flag it, so the page can say so instead of pretending Gemini's tests ran.
- * TEMPORARY: remove the retry once vision/ ships contract v4.
+ * vision/ supports v4 since wan/vision-v4; the retry only matters against an old v3 server.
  */
 export async function createRequest(body: CreateRequestBody): Promise<CreateResult> {
   if (import.meta.env.VITE_MOCK === '1') return mockCreate()
@@ -67,9 +67,8 @@ export async function createRequest(body: CreateRequestBody): Promise<CreateResu
 }
 
 /**
- * Gemini picks the 6 best tests for this exact item. The key lives server-side
- * (dev: the Vite dev server, web/server/suggestTests.ts; prod: vision/),
- * the browser never sees it. If the call fails we fall back to the standard
+ * Gemini picks the 6 best tests for this exact item. vision/ serves it
+ * (contract v4) and holds the key; the browser never sees it. If the call fails we fall back to the standard
  * list from shared/tests.json and say so (source: "catalog").
  */
 export async function suggestTests(body: SuggestBody): Promise<SuggestResponse> {
