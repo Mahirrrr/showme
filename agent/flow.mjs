@@ -56,7 +56,9 @@ export async function runCall(deps, limits = LIMITS) {
       show({ ...card, status: 'waiting' });
       await say(attempt === 0 ? ch.prompt : `Let's try that again. ${ch.prompt}`);
       await sleep(limits.settleMs);
-      const frames = grabFrames();
+      // The contract wants 2 to 4 frames; fewer counts as no frames (vision would reject it with a 422).
+      const grabbed = grabFrames();
+      const frames = grabbed.length >= 2 ? grabbed : [];
       if (frames.length === 0 && noFrame < limits.noFrameWaits) {
         noFrame++;
         show({ ...card, status: 'waiting', note: "I can't see you" });
