@@ -106,8 +106,8 @@ const agent = defineAgent({
     });
 
     const deps = {
-      say: text => session.say(text, { allowInterruptions: false }).waitForPlayout(),
-      show,
+      say: text => { console.log(`[say] ${text}`); return session.say(text, { allowInterruptions: false }).waitForPlayout(); },
+      show: c => { console.log(`[card] ${c.status ?? ''} ${c.prompt ?? ''}`); show(c); },
       listenForCode,
       grabFrames: () => buffer.recent(2000, 4).map(f => toJpegBase64(f)),
       vision,

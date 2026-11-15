@@ -1,8 +1,10 @@
 // The agent's own video: one challenge card per state, rendered to RGBA for LiveKit's VideoSource.
 import { createCanvas } from '@napi-rs/canvas';
 
-export const WIDTH = 960;
-export const HEIGHT = 540;
+// Portrait, about iPhone-shaped (9:19.5): FaceTime fills the phone screen, so a landscape card loses its sides.
+export const WIDTH = 540;
+export const HEIGHT = 1170;
+const M = 56; // side margin, wide enough to survive a small crop
 export const FPS = 10;
 
 const COLORS = {
@@ -36,25 +38,32 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
   const g = canvas.getContext('2d');
   g.fillStyle = COLORS.bg; g.fillRect(0, 0, WIDTH, HEIGHT);
 
-  g.fillStyle = COLORS.dim; g.font = '600 24px sans-serif'; g.textBaseline = 'top';
-  g.fillText(step && total ? `Check ${step} of ${total}` : 'ShowMe', 48, 36);
-  if (title) { g.textAlign = 'right'; g.fillText(title, WIDTH - 48, 36); g.textAlign = 'left'; }
+  // Header: step, then the item name on its own line (FaceTime's own buttons cover the very top).
+  g.textBaseline = 'top';
+  g.fillStyle = COLORS.dim; g.font = '600 28px sans-serif';
+  g.fillText(step && total ? `Check ${step} of ${total}` : 'ShowMe', M, 150);
+  if (title) {
+    g.fillStyle = COLORS.ink; g.font = '600 30px sans-serif';
+    g.fillText(wrapText(title, WIDTH - 2 * M, t => g.measureText(t).width)[0] ?? '', M, 192);
+  }
 
-  g.fillStyle = COLORS.ink; g.font = '700 56px sans-serif';
-  const lines = wrapText(prompt, WIDTH - 96, t => g.measureText(t).width).slice(0, 4);
-  const lineH = 68, top = (HEIGHT - lines.length * lineH) / 2 - 30;
-  lines.forEach((l, i) => g.fillText(l, 48, top + i * lineH));
+  // The challenge, big and centered vertically.
+  g.fillStyle = COLORS.ink; g.font = '700 52px sans-serif';
+  const lines = wrapText(prompt, WIDTH - 2 * M, t => g.measureText(t).width).slice(0, 8);
+  const lineH = 64, top = (HEIGHT - lines.length * lineH) / 2 - 40;
+  lines.forEach((l, i) => g.fillText(l, M, top + i * lineH));
 
+  // Status bar, above FaceTime's bottom controls.
   const label = note || STATUS_TEXT[status] || '';
   if (label) {
     g.fillStyle = COLORS[status] || COLORS.info;
-    g.fillRect(0, HEIGHT - 110, WIDTH, 70);
-    g.fillStyle = '#ffffff'; g.font = '700 34px sans-serif'; g.textBaseline = 'middle';
-    g.fillText(label, 48, HEIGHT - 75);
+    g.fillRect(0, HEIGHT - 330, WIDTH, 90);
+    g.fillStyle = '#ffffff'; g.font = '700 36px sans-serif'; g.textBaseline = 'middle';
+    g.fillText(label, M, HEIGHT - 285);
   }
 
-  g.fillStyle = COLORS.dim; g.font = '500 18px sans-serif'; g.textBaseline = 'bottom';
-  g.fillText('ShowMe · live check', 48, HEIGHT - 10);
+  g.fillStyle = COLORS.dim; g.font = '500 22px sans-serif'; g.textBaseline = 'top';
+  g.fillText('ShowMe · live check', M, HEIGHT - 220);
   return new Uint8Array(g.getImageData(0, 0, WIDTH, HEIGHT).data.buffer);
 }
 
@@ -63,7 +72,7 @@ export function withPulse(card, tick) {
   const out = new Uint8Array(card);
   const on = Math.floor(tick / (FPS / 2)) % 2 === 0;
   const color = on ? [239, 68, 68] : [80, 30, 30];
-  for (let y = 14; y < 26; y++) for (let x = WIDTH - 26; x < WIDTH - 14; x++) {
+  for (let y = 156; y < 172; y++) for (let x = WIDTH - M - 16; x < WIDTH - M; x++) {
     const i = (y * WIDTH + x) * 4;
     out[i] = color[0]; out[i + 1] = color[1]; out[i + 2] = color[2]; out[i + 3] = 255;
   }

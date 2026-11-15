@@ -29,6 +29,10 @@ test('renderCard returns a full RGBA frame for every status', () => {
     assert.equal(px.length, WIDTH * HEIGHT * 4);
   }
 });
+test('cards are portrait, phone-shaped (FaceTime on iPhone crops landscape)', () => {
+  assert.ok(HEIGHT > WIDTH * 2, `${WIDTH}x${HEIGHT} is not tall enough`);
+  assert.equal(WIDTH % 2, 0); assert.equal(HEIGHT % 2, 0); // even sizes for the video encoder
+});
 test('renderCard survives empty and very long prompts', () => {
   assert.equal(renderCard().length, WIDTH * HEIGHT * 4);
   assert.equal(renderCard({ prompt: 'word '.repeat(400) + '🎮 ünïcødé' }).length, WIDTH * HEIGHT * 4);
