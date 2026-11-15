@@ -163,6 +163,14 @@ test('makeCallerEncoder: crops FaceTime frames, remembers the strip, passes othe
 });
 
 // ---------- vision HTTP client
+test('http vision: check waits up to 30 s (Gemini can take 20 s), other calls 6 s', async () => {
+  const timeouts = [];
+  const fetchImpl = async () => new Response('{}', { status: 200 });
+  const v = makeHttpVision({ url: 'http://x/api', key: 'k', fetchImpl, signalFor: ms => { timeouts.push(ms); return undefined; } });
+  await v.check({ frames: [] });
+  await v.start('r1');
+  assert.deepEqual(timeouts, [30000, 6000]);
+});
 test('http vision: sends the agent key, maps 404 to null, wraps errors', async () => {
   const seen = [];
   const fetchImpl = async (url, opts) => {

@@ -28,17 +28,18 @@ export function makeMockVision({ results = {} } = {}) {
   };
 }
 
-export function makeHttpVision({ url, key, fetchImpl = fetch, timeoutMs = 6000 }) {
+// Vision's Gemini check can take up to 20 s (Youngjun's CHECK_TIMEOUT_SECONDS), so /agent/check waits 30 s.
+export function makeHttpVision({ url, key, fetchImpl = fetch, timeoutMs = 6000, checkTimeoutMs = 30000, signalFor = ms => AbortSignal.timeout(ms) }) {
   if (!url || !key) throw new Error('VISION_URL and AGENT_KEY are required unless MOCK_VISION=1');
   const base = url.replace(/\/$/, '');
-  const call = async (method, path, body, { allow404 = false } = {}) => {
+  const call = async (method, path, body, { allow404 = false, wait = timeoutMs } = {}) => {
     let response;
     try {
       response = await fetchImpl(`${base}${path}`, {
         method,
         headers: { 'x-agent-key': key, ...(body ? { 'content-type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: signalFor(wait),
       });
     } catch (error) { throw new VisionError(`${method} ${path}: ${error.name === 'TimeoutError' ? 'timeout' : error.message}`); }
     if (allow404 && response.status === 404) return null;
@@ -49,7 +50,7 @@ export function makeHttpVision({ url, key, fetchImpl = fetch, timeoutMs = 6000 }
     byCode: code => call('GET', `/agent/requests/by-code/${encodeURIComponent(code)}`, undefined, { allow404: true }),
     latestWaiting: () => call('GET', '/agent/requests/latest-waiting', undefined, { allow404: true }),
     start: id => call('POST', `/agent/requests/${id}/start`),
-    check: body => call('POST', '/agent/check', body),
+    check: body => call('POST', '/agent/check', body, { wait: checkTimeoutMs }),
     finish: id => call('POST', `/agent/requests/${id}/finish`),
     abort: id => call('POST', `/agent/requests/${id}/abort`),
   };
