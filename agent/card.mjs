@@ -85,23 +85,30 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
 
   const verdict = VERDICT[status];
   if (verdict) {
-    g.font = `118px ${DISPLAY}`; g.fillText(verdict, M - 8, 630);
-    let y = 700;
-    if (note) { g.font = `30px ${DISPLAY}`; wrapText(note, maxW, measure).slice(0, 2).forEach(l => { g.fillText(l, M, y); y += 42; }); y += 8; }
-    g.globalAlpha = 0.85; g.font = `italic 32px ${SERIF}`;
-    wrapText(prompt, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 42; });
+    g.font = `118px ${DISPLAY}`; g.fillText(verdict, M - 8, 600);
+    let y = 680;
+    if (note) { g.font = `42px ${SERIF}`; wrapText(note, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 50; }); y += 14; }
+    g.globalAlpha = 0.8; g.font = `italic 30px ${SERIF}`;
+    wrapText(prompt, maxW, measure).slice(0, 3).forEach(l => { g.fillText(l, M, y); y += 38; });
+    g.globalAlpha = 1;
+  } else if (note) {
+    // The seller already heard the task: what to fix now is the big text, the task drops to a small line under it.
+    g.font = `54px ${SERIF}`;
+    const lines = wrapText(note, maxW, measure).slice(0, 6), lh = 62;
+    let y = 520 - (lines.length * lh) / 2 + 40;
+    lines.forEach(l => { g.fillText(l, M - 2, y); y += lh; });
+    y += 30;
+    g.globalAlpha = 0.75; g.font = `24px ${DISPLAY}`; g.fillText('THE TASK', M, y); y += 42;
+    g.font = `italic 32px ${SERIF}`;
+    wrapText(prompt, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 40; });
     g.globalAlpha = 1;
   } else {
     g.font = `68px ${SERIF}`;
     const lines = wrapText(prompt, maxW, measure).slice(0, 6), lh = 76;
     const top = 580 - (lines.length * lh) / 2 + 40;
     lines.forEach((l, i) => g.fillText(l, M - 2, top + i * lh));
-    const footer = note || FOOTER[status];
-    if (footer) {
-      // A hint can be a sentence: wrap it (up to 3 lines) instead of running off the column.
-      g.font = `${note ? 28 : 24}px ${DISPLAY}`;
-      wrapText(note ? footer : footer.toUpperCase(), maxW, measure).slice(0, 3).forEach((l, i) => g.fillText(l, M, 900 + i * 38));
-    }
+    const footer = FOOTER[status];
+    if (footer) { g.font = `24px ${DISPLAY}`; g.fillText(footer, M, 900); }
   }
   g.restore();
   return new Uint8Array(g.getImageData(0, 0, WIDTH, HEIGHT).data.buffer);
