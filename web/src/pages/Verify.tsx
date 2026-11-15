@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { CATEGORY_LABEL, formatLine, formatWhen } from '../lib/format'
-import { bannerFor, type BannerTone } from '../lib/report'
+import { bannerFor, formatPercentage, hasScore, reportWarning, summarize, type BannerTone } from '../lib/report'
 import { useRequestPoll } from '../lib/useRequestPoll'
 import type { CheckResult, RequestView } from '../types'
 import { buttonPrimary, buttonSecondary, Card, Page, Spinner, VerdictBadge } from '../components/ui'
@@ -173,8 +173,10 @@ const BANNER_STYLE: Record<BannerTone, string> = {
   unv: 'bg-unv-soft text-unv',
 }
 
-function Report({ view }: { view: RequestView }) {
+export function Report({ view }: { view: RequestView }) {
   const banner = bannerFor(view)
+  const summary = summarize(view)
+  const warning = reportWarning(view)
   return (
     <>
       <ItemHeader view={view} eyebrow="ShowMe report" />
@@ -182,7 +184,15 @@ function Report({ view }: { view: RequestView }) {
       <section className={`animate-row-in rounded-2xl p-5 ${BANNER_STYLE[banner.tone]}`} role="status">
         <p className="text-xl leading-snug font-semibold">{banner.title}</p>
         <p className="mt-1 text-[15px] opacity-85">{banner.detail}</p>
+        {hasScore(summary) && (
+          <dl className="mt-4 flex flex-wrap gap-6">
+            <div><dt className="text-sm opacity-85">Pass percentage</dt><dd className="text-2xl font-semibold">{formatPercentage(summary.pass_percentage)}</dd></div>
+            <div><dt className="text-sm opacity-85">Passed / selected tests</dt><dd className="text-2xl font-semibold">{summary.passed_tests} / {summary.total_selected_tests}</dd></div>
+          </dl>
+        )}
+        {hasScore(summary) && <p className="mt-2 text-xs opacity-85">The verdict uses the exact pass rate; displayed percentages are rounded.</p>}
       </section>
+      {warning && <p role="alert" className="mt-3 rounded-xl border border-unv bg-unv-soft p-4 text-sm font-medium text-unv">{warning}</p>}
 
       <ResultList results={view.results} emptyText="No checks were recorded." />
 

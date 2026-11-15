@@ -1,6 +1,6 @@
 # ShowMe vision backend
 
-Python **3.11+**, FastAPI, Gemini, and MongoDB Atlas. Implements Contract v5 as defined in `shared/contract.md`. All HTTP routes are under `/api`.
+Python **3.11+**, FastAPI, Gemini, and MongoDB Atlas. Implements Contract v5.1 as defined in `shared/contract.md`. All HTTP routes are under `/api`.
 
 ## Start offline
 
@@ -151,8 +151,17 @@ SDK references used for implementation: [Google Gen AI SDK](https://googleapis.g
 
 ## Coordinated verification UX (Contract v5)
 
-New requests require at least three selected tests, including suggested objects or standard IDs. The optional custom-text test is additional. Only selected buyer/custom tests run; there are no surprise challenges. New summaries use `liveness: "not_run"` and all-pass reports say "All checks passed". Completed historical reports are preserved, including older liveness banners.
+New requests require at least three selected tests, including suggested objects or standard IDs. The optional custom-text test is additional. Only selected buyer/custom tests run; there are no surprise challenges. New summaries use `liveness: "not_run"`; Contract v5.1 reports display the authoritative overall score described below. Completed historical reports are preserved, including older liveness banners.
 
 Each test has an initial attempt plus up to two retries. Cards show "Try N of 3" and retries are spoken. Sellers receive 12 seconds to act each time; the agent checks the remaining 4:30 budget before evaluations and reserves 15 seconds for finish. Slow calls may end before every retry; unperformed tests are unverified. The backend keeps ordered, image-free `attempt_history`, and uses the last saved result for the final verdict and totals. Failed → passed counts as one passed test.
 
 Authentication, camera-mode preprocessing, sanitized ≤400 px thumbnails, the 20-second Gemini deadline and 30-second agent check HTTP timeout are unchanged. Restart all components together for the new summary value and minimum selection rule. Do not reuse obsolete local test scripts that create fewer than three tests.
+
+
+## Overall scoring (Contract v5.1)
+
+The backend now supplies an authoritative overall verdict: at least **75%** of selected buyer tests must pass. Configure `PASSING_THRESHOLD_PERCENT` in the backend (default 75, valid range >0 to 100). Scores count final outcomes once after retries; failed, unverified and unperformed tests remain not passed. With four selected tests, three passes meet the default threshold; with three selections, two passes do not.
+
+New summaries add `overall_verdict`, `pass_percentage`, `passed_tests`, `total_selected_tests` and `passing_threshold_percent` inside the existing MongoDB summary. Optional custom-text checks and historical liveness checks stay visible but are excluded from selected-test scoring. Existing aggregate counts are unchanged. The threshold is saved at finish so future configuration changes do not alter that completed score. Legacy documents without score fields are enriched on read under the current threshold without modifying stored records.
+
+The report and agent use the backend verdict. Passing overall never changes an individual Failed/Unverified row. Show a warning whenever overall passes with individual issues, and preserve historical liveness warnings. The UI rounds percentages for display only; the decision uses the exact ratio. Restart components together; the API routes, three-test minimum, authentication, camera-mode/privacy processing, Gemini and Atlas adapters, and existing timeouts are unchanged.

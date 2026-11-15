@@ -58,6 +58,22 @@ export function hintFor(verdict, max = 100) {
   return `${cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : cut.length)}…`;
 }
 
+/** Use the API's score snapshot; keep old server summaries readable. */
+export function completionFor(s) {
+  if ((s.overall_verdict === 'passed' || s.overall_verdict === 'failed') && typeof s.pass_percentage === 'number') {
+    const percentage = `${Number(s.pass_percentage.toFixed(2))}%`;
+    const warning = s.overall_verdict === 'passed' && (s.failed > 0 || s.unverified > 0) ? ' Some checks did not pass. Read the report.' : '';
+    return {
+      headline: `Overall ${s.overall_verdict.toUpperCase()}`,
+      status: s.overall_verdict,
+      note: `${s.passed_tests} / ${s.total_selected_tests} selected tests passed · ${percentage}.${warning}`,
+      spoken: `Overall verification ${s.overall_verdict}. ${s.passed_tests} of ${s.total_selected_tests} selected tests passed.${warning}`,
+    };
+  }
+  const headline = s.liveness === 'failed' ? 'Live check failed' : s.failed === 0 && s.unverified === 0 ? (s.liveness === 'not_run' ? 'All checks passed' : 'Verified live') : 'Check complete';
+  return { headline, status: s.liveness === 'failed' ? 'failed' : s.failed || s.unverified ? 'unverified' : 'passed', note: `${s.passed} passed · ${s.failed} failed · ${s.unverified} unverified`, spoken: `${s.passed} of ${s.total} passed.` };
+}
+
 export async function runCall(deps, limits = LIMITS) {
   const { say, show, listenForCode, grabFrames, vision, sleep, now, log = () => {}, catalog } = deps;
   const startedAt = now();
@@ -149,8 +165,8 @@ export async function runCall(deps, limits = LIMITS) {
   const done = await vision.finish(request.request_id);
   state.finished = true;
   const s = done.summary;
-  const headline = s.liveness === 'failed' ? 'Live check failed' : s.failed === 0 && s.unverified === 0 ? (s.liveness === 'not_run' ? 'All checks passed' : 'Verified live') : 'Check complete';
-  show({ prompt: `${headline}. The report is on the buyer's link.`, status: s.liveness === 'failed' ? 'failed' : s.failed || s.unverified ? 'unverified' : 'passed', note: `${s.passed} passed · ${s.failed} failed · ${s.unverified} unverified` });
-  await say(say1(`All done. ${s.passed} of ${s.total} passed. The report is on the buyer's link. Goodbye.`));
+  const completion = completionFor(s);
+  show({ prompt: `${completion.headline}. The report is on the buyer's link.`, status: completion.status, note: completion.note });
+  await say(say1(`All done. ${completion.spoken} The report is on the buyer's link. Goodbye.`));
   return state;
 }

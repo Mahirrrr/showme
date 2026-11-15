@@ -1,5 +1,6 @@
 """Configuration is explicit; live mode never silently becomes mock mode."""
 import os
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
@@ -31,6 +32,11 @@ class Settings:
     frame_mode: str = 'camera'
     frame_size: tuple = (640, 360)
     mask_boxes: tuple | None = None
+    passing_threshold_percent: float = 75.0
+
+    def __post_init__(self):
+        if not math.isfinite(self.passing_threshold_percent) or not 0 < self.passing_threshold_percent <= 100:
+            raise ValueError('PASSING_THRESHOLD_PERCENT must be greater than 0 and at most 100')
 
     @classmethod
     def from_env(cls):
@@ -48,5 +54,6 @@ class Settings:
                    crop_box=coordinates(box) if box else None,
                    mock_result=os.getenv('MOCK_RESULT', 'passed'),
                    frame_mode=os.getenv('VISION_FRAME_MODE', 'camera'),
+                   passing_threshold_percent=float(os.getenv('PASSING_THRESHOLD_PERCENT', '75')),
                    frame_size=coordinates(size),
                    mask_boxes=tuple(coordinates(b) for b in masks.split(';')) if masks else None)

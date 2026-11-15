@@ -5,7 +5,7 @@ import { renderCard, withPulse, wrapText, WIDTH, HEIGHT, COLUMN } from '../card.
 import { FrameBuffer, toJpegBase64, findCallerStrip, cropToCallerVideo, makeCallerEncoder } from '../frames.mjs';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
-import { runCall, LIMITS, orderChallenges, hintFor } from '../flow.mjs';
+import { runCall, LIMITS, orderChallenges, hintFor, completionFor } from '../flow.mjs';
 import catalog from '../../shared/tests.json' with { type: 'json' };
 
 // ---------- code listener (sellers say the code while the greeting is still playing)
@@ -350,8 +350,8 @@ test('flow: initially failed test ends passed and mock report counts only the fi
   assert.equal(state.results[0].result, 'passed');
   assert.equal(state.results[0].attempts, 2);
   const report = await h.vision.finish(state.request.request_id);
-  assert.deepEqual(report.summary, { passed: 3, failed: 0, unverified: 0, total: 3, liveness: 'not_run' });
-  assert.ok(h.shown.some(c => c.prompt.startsWith('All checks passed.')));
+  assert.deepEqual(report.summary, { passed: 3, failed: 0, unverified: 0, total: 3, liveness: 'not_run', passed_tests: 3, total_selected_tests: 3, pass_percentage: 100, passing_threshold_percent: 75, overall_verdict: 'passed' });
+  assert.ok(h.shown.some(c => c.prompt.startsWith('Overall PASSED.')));
 });
 
 test('flow: transport retry reuses the uncertain attempt number', async () => {
@@ -377,4 +377,21 @@ test('flow: all slow failures respect the total call budget and still finish', a
   assert.equal(state.finished, true);
   assert.ok(h.clock() <= LIMITS.callBudgetMs - LIMITS.finishReserveMs);
   assert.ok(state.results.length < 3 || state.results.some(r => r.attempts < 3));
+});
+
+test('completion uses authoritative overall verdict and warns without changing individual results', () => {
+  const summary = { passed: 3, failed: 1, unverified: 0, total: 4, liveness: 'not_run', passed_tests: 3, total_selected_tests: 4, pass_percentage: 75, passing_threshold_percent: 75, overall_verdict: 'passed' };
+  const card = completionFor(summary);
+  assert.equal(card.headline, 'Overall PASSED');
+  assert.equal(card.status, 'passed');
+  assert.match(card.note, /75%/);
+  assert.match(card.spoken, /Some checks did not pass/);
+  assert.equal(summary.failed, 1);
+  assert.equal(completionFor({ ...summary, passing_threshold_percent: 80, overall_verdict: 'failed' }).headline, 'Overall FAILED');
+  assert.equal(completionFor({ ...summary, failed: 0, unverified: 1 }).status, 'passed');
+});
+
+test('completion still handles historical reports without score fields', () => {
+  assert.equal(completionFor({ passed: 3, failed: 0, unverified: 0, total: 3, liveness: 'passed' }).headline, 'Verified live');
+  assert.equal(completionFor({ passed: 3, failed: 1, unverified: 0, total: 4, liveness: 'failed' }).headline, 'Live check failed');
 });

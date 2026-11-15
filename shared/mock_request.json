@@ -156,7 +156,12 @@
       "failed": 1,
       "unverified": 1,
       "total": 3,
-      "liveness": "not_run"
+      "liveness": "not_run",
+      "passed_tests": 1,
+      "total_selected_tests": 3,
+      "pass_percentage": 33.333333333333336,
+      "passing_threshold_percent": 75,
+      "overall_verdict": "failed"
     },
     "verified_at": "2026-11-14T23:42:10Z"
   },

@@ -2,7 +2,7 @@
 
 **Buying used? Make the seller prove it live.**
 
-The buyer creates a check link and sends it to the seller. The seller FaceTimes ShowMe, and an AI agent runs the buyer's tests with clear instructions and up to two retries per test. Each check comes back Passed, Failed or Unverified, and the same link turns into the inspection report.
+The buyer creates a check link and sends it to the seller. The seller FaceTimes ShowMe, and an AI agent runs the buyer's tests with clear instructions and up to two retries per test. Each check comes back Passed, Failed or Unverified, and the same link turns into the inspection report. Overall verification passes when at least 75% of selected tests pass; individual failures remain visible.
 
 Built at HackUTA 2026 by Mahir, Wan and Youngjun.
 

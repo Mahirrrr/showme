@@ -24,6 +24,7 @@ from .catalog import CATALOG, build_challenges
 from .checker import GeminiChecker, MockChecker, unavailable
 from .config import ROOT, Settings
 from .store import Conflict, MemoryStore, MongoStore
+from .scoring import scored_summary
 from .suggest import GeminiSuggester, SuggestRequest, TestSpec, catalog_fallback, slug
 from .thumbs import UnusableEvidence, prepare_frames, thumbnail
 
@@ -106,7 +107,7 @@ def public_view(doc, settings):
     if doc['status'] == 'in_call' and doc.get('current_challenge'):
         view['current_challenge'] = {k: doc['current_challenge'][k] for k in ('prompt', 'attempt')}
     if doc.get('summary'):
-        view['summary'] = doc['summary']
+        view['summary'] = scored_summary(doc, settings.passing_threshold_percent)
     if doc.get('verified_at'):
         view['verified_at'] = doc['verified_at']
     return view
@@ -136,7 +137,7 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
                 await app.state.suggester.close()
             await run_in_threadpool(app.state.store.close)
 
-    app = FastAPI(title='ShowMe Vision', version='5', lifespan=lifespan)
+    app = FastAPI(title='ShowMe Vision', version='5.1', lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
@@ -361,11 +362,12 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
             if liveness:  # already-running legacy calls retain their original semantics
                 liveness_status = 'passed' if all(r['result'] == 'passed' for r in liveness) else 'failed'
             summary.update(total=len(results), liveness=liveness_status)
-            doc.update(summary=summary, status='complete', verified_at=now())
+            doc['summary'] = summary
+            doc.update(summary=scored_summary(doc, settings.passing_threshold_percent), status='complete', verified_at=now())
             doc.pop('current_challenge', None)
             doc.pop('active_code', None)
             storage().save(doc)
-        return {'summary': doc['summary'], 'link_url': link(doc), 'notify_chat_ids': doc['watch_chat_ids']}
+        return {'summary': scored_summary(doc, settings.passing_threshold_percent), 'link_url': link(doc), 'notify_chat_ids': doc['watch_chat_ids']}
 
     @agent.post('/requests/{request_id}/abort')
     def abort(request_id: str):

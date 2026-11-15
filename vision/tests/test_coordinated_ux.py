@@ -66,7 +66,8 @@ def test_history_and_final_result_survive_mongo_restart(frames, states):
         assert [h['result'] for h in row['attempt_history']] == list(states)
         assert [h['attempt'] for h in row['attempt_history']] == list(range(1, len(states) + 1))
         assert all(set(h) == {'attempt', 'result', 'confidence', 'reason'} for h in row['attempt_history'])
-        assert report['summary'] == dict(passed=int(states[-1] == 'passed'), failed=int(states[-1] == 'failed'), unverified=2, total=3, liveness='not_run')
+        assert {k: report['summary'][k] for k in ('passed','failed','unverified','total','liveness')} == dict(passed=int(states[-1] == 'passed'), failed=int(states[-1] == 'failed'), unverified=2, total=3, liveness='not_run')
+        assert report['summary']['overall_verdict'] == 'failed'
         assert all(r['kind'] != 'liveness' for r in report['results'])
         saved = collection.find_one({'request_id': d['request_id']})
         assert all('thumb' not in h and 'frames' not in h for h in saved['results'][0]['attempt_history'])
@@ -98,4 +99,5 @@ def test_already_running_legacy_liveness_keeps_failure_summary(frames):
             response = c.post('/api/agent/check', headers=HEAD, json=dict(request_id=d['request_id'], challenge_id=challenge['id'], attempt=1, frames=frames))
             assert response.status_code == 200
         report = c.post(root + '/finish', headers=HEAD).json()
-        assert report['summary'] == dict(passed=3, failed=1, unverified=0, total=4, liveness='failed')
+        assert {k: report['summary'][k] for k in ('passed','failed','unverified','total','liveness')} == dict(passed=3, failed=1, unverified=0, total=4, liveness='failed')
+        assert report['summary']['overall_verdict'] == 'passed'

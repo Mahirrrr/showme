@@ -53,6 +53,12 @@ export interface Summary {
   unverified: number
   total: number
   liveness: 'passed' | 'failed' | 'not_run'
+  /** Additive backend score snapshot. Absent on reports from older servers. */
+  overall_verdict?: 'passed' | 'failed'
+  pass_percentage?: number
+  passed_tests?: number
+  total_selected_tests?: number
+  passing_threshold_percent?: number
 }
 
 /** GET /api/requests/{token} */

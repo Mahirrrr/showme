@@ -167,9 +167,11 @@ showme/
 
 ---
 
-## 5. API contract (current v5)
+## 5. API contract (current v5.1)
 
-# API contract v5
+# API contract v5.1
+
+v5.1 adds authoritative configurable overall scoring (default 75%) without changing individual verdicts or existing routes.
 
 Approved coordinated UX update: new inspections run only the buyer's selected tests, require at least three selections, and preserve retry history. v4 full-object tests and v3 catalog IDs remain supported subject to the new minimum. Completed historical reports remain readable and are never rewritten.
 
@@ -208,13 +210,28 @@ GET /requests/{token}
                  result: "passed"|"failed"|"unverified",
                  confidence, reason, attempts, thumb_url,
                  attempt_history?: [{attempt,result,confidence,reason}]}],
-      summary?: {passed,failed,unverified,total,liveness: "not_run"|"passed"|"failed"},
+      summary?: {passed,failed,unverified,total,liveness: "not_run"|"passed"|"failed",
+                 overall_verdict?: "passed"|"failed", pass_percentage?: number,
+                 passed_tests?: number, total_selected_tests?: number,
+                 passing_threshold_percent?: number},
       verified_at? }
 ```
 
-`kind: "liveness"` and `summary.liveness: "passed"|"failed"` are retained only for historical reports or already-running legacy inspections. New inspections return `liveness: "not_run"`, and contain buyer/custom results only. A new all-pass report says **All checks passed**, without claiming a separate liveness check occurred. Historical recording warnings continue to render.
+`kind: "liveness"` and `summary.liveness: "passed"|"failed"` are retained only for historical reports or already-running legacy inspections. New inspections return `liveness: "not_run"`, and contain buyer/custom results only. New completed reports display the backend-authoritative **Overall PASSED** or **Overall FAILED**, without claiming a separate liveness check occurred. Historical recording warnings continue to render.
 
 `attempts` is the final saved attempt number (1–3; 0 for unperformed checks). Optional `attempt_history` is ordered by attempt, contains no images, and is absent on older reports. The result, reason, confidence, and single thumbnail on the result row represent its **last saved attempt**. A failed initial attempt followed by a pass counts as one **passed** test, not a failed test. Summary totals count tests, never attempts.
+
+## Overall verification score
+
+- `total_selected_tests` is the number of tests in the request's `tests` array (or stored `test_specs`). Only `kind: "buyer"` final outcomes count. The optional `custom_test` is additional and is not in the scoring denominator; neither are historical liveness challenges. All individual rows remain visible.
+- `passed_tests` counts each final passed selected test once, regardless of failed earlier attempts. FAILED, UNVERIFIED and unperformed selected tests count as not passed. Finishing an incomplete call retains those tests in the denominator.
+- `pass_percentage = passed_tests / total_selected_tests * 100`.
+- `overall_verdict` is `passed` when the **unrounded** percentage is at least `passing_threshold_percent`; otherwise `failed`. Zero selected tests always yield 0% and failed. No individual verdict is upgraded by the aggregate score.
+- Backend `PASSING_THRESHOLD_PERCENT` defaults to **75**, must be finite and greater than 0 and at most 100, and is supplied to the frontend in the summary. For three selections, two passes are only 66.67%, so all three must pass; with four selections, three passes meet 75% exactly.
+- New summary score fields are saved inside the existing MongoDB `summary` at finish. The threshold is a snapshot: later configuration changes do not rescore those reports. Both finish and public GET return that same authoritative snapshot.
+- Existing completed documents without these fields need no migration or writes: the backend adds a derived score on read using the current configured threshold. Stored counts, individual outcomes, histories and legacy liveness fields are preserved. Old-server responses without scoring fields remain readable by the frontend using legacy banners.
+- The report displays the overall verdict, percentage, and selected passed/total counts alongside every individual result. If overall passes but any individual check failed or was unverified, show an explicit warning. Historical liveness warnings remain visible separately; they do not change the selected-test percentage.
+- `passed`, `failed`, `unverified` and `total` retain their existing meanings across all result rows (including optional custom/historical liveness rows). Consumers must use `passed_tests`/`total_selected_tests` for the selected-test score, not those legacy counts.
 
 ## Agent routes
 
