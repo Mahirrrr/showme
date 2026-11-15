@@ -33,7 +33,7 @@ ShowMe puts the **buyer** in control of that call without being on it. The buyer
 
 | | Who | What happens |
 |---|---|---|
-| **1** | Buyer | Pastes the listing link, a screenshot, or a photo of the item (or types it). Gemini names the item and suggests the tests that matter for it: battery health and Activation Lock for an iPhone, the brand and size tag for a sweater. The buyer keeps 3 to 5. |
+| **1** | Buyer | Pastes the listing link, a screenshot, or a photo of the item (or types it). Gemini names the item and suggests the tests that matter for it: battery health and Activation Lock for an iPhone, the brand and size tag for a sweater. The buyer keeps 2 to 5. |
 | **2** | Buyer | Sends the check link to the seller. It holds a 4-digit code. |
 | **3** | Seller | Taps the link to FaceTime ShowMe and says the code. No app, no account. |
 | **4** | Agent | Speaks each task and shows it as a card in the video. The seller can say **"ready"**, **"again"** or **"skip"**. Each test gets up to 2 retries with a hint. |

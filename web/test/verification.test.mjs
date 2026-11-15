@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { canSubmitSelection, selectionMessage, selectionTone, ownTest, MAX_TESTS } from '../src/lib/selection.ts';
 import { bannerFor, summarize } from '../src/lib/report.ts';
 
-test('a check needs 3 to 5 tests', () => {
+test('a check needs 2 to 5 tests', () => {
   assert.equal(MAX_TESTS, 5);
   for (const count of [0, 1, 6, 20, 2.5]) assert.equal(canSubmitSelection(count), false);
   for (const count of [2, 3, 4, 5]) assert.equal(canSubmitSelection(count), true);

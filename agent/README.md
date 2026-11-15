@@ -30,11 +30,11 @@ Plain LiveKit room without FaceTime minutes: `npm run start:room`, then join the
 
 ## Coordinated verification UX (Contract v5)
 
-New requests require at least three selected tests, including suggested objects or standard IDs. The optional custom-text test is additional. Only selected buyer/custom tests run; there are no surprise challenges. New summaries use `liveness: "not_run"`; Contract v5.1 reports display the authoritative overall score described below. Completed historical reports are preserved, including older liveness banners.
+New requests require 2 to 5 selected tests, including suggested objects or standard IDs. The optional custom-text test is additional. Only selected buyer/custom tests run; there are no surprise challenges. New summaries use `liveness: "not_run"`; Contract v5.1 reports display the authoritative overall score described below. Completed historical reports are preserved, including older liveness banners.
 
 Each test has an initial attempt plus up to two retries. Cards show "Try N of 3" and retries are spoken. Sellers receive 12 seconds to act each time; the agent checks the remaining 4:30 budget before evaluations and reserves 15 seconds for finish. Slow calls may end before every retry; unperformed tests are unverified. The backend keeps ordered, image-free `attempt_history`, and uses the last saved result for the final verdict and totals. Failed → passed counts as one passed test.
 
-Authentication, camera-mode preprocessing, sanitized ≤400 px thumbnails, the 20-second Gemini deadline and 30-second agent check HTTP timeout are unchanged. Restart all components together for the new summary value and minimum selection rule. Do not reuse obsolete local test scripts that create fewer than three tests.
+Authentication, camera-mode preprocessing, sanitized ≤400 px thumbnails, the 20-second Gemini deadline and 30-second agent check HTTP timeout are unchanged. Restart all components together for the new summary value and minimum selection rule. Do not reuse obsolete local test scripts that create fewer than two tests.
 
 
 ## Overall scoring (Contract v5.1)
