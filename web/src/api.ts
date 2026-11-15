@@ -43,9 +43,27 @@ export async function getRequest(token: string): Promise<RequestView> {
   return request<RequestView>('/requests/' + encodeURIComponent(token))
 }
 
-export async function createRequest(body: CreateRequestBody): Promise<CreateResponse> {
+export interface CreateResult extends CreateResponse {
+  /** true when the server only took contract v3 test ids, so the standard tests were used */
+  usedStandardTests?: boolean
+}
+
+/**
+ * Sends full test objects (proposed contract v4). Until vision/ accepts them it
+ * answers 422; then we retry once with the category's standard test ids (v3)
+ * and flag it, so the page can say so instead of pretending Gemini's tests ran.
+ * TEMPORARY: remove the retry once vision/ ships contract v4.
+ */
+export async function createRequest(body: CreateRequestBody): Promise<CreateResult> {
   if (import.meta.env.VITE_MOCK === '1') return mockCreate()
-  return request<CreateResponse>('/requests', { method: 'POST', body: JSON.stringify(body) })
+  try {
+    return await request<CreateResponse>('/requests', { method: 'POST', body: JSON.stringify(body) })
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 422) throw err
+    const v3 = { ...body, tests: catalog[body.category].map((t) => t.id) }
+    const res = await request<CreateResponse>('/requests', { method: 'POST', body: JSON.stringify(v3) })
+    return { ...res, usedStandardTests: true }
+  }
 }
 
 /**

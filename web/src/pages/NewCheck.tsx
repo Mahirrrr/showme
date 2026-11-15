@@ -1,10 +1,10 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { createRequest, suggestTests } from '../api'
+import { createRequest, suggestTests, type CreateResult } from '../api'
 import { guessCategory } from '../lib/catalog'
 import { CATEGORY_LABEL } from '../lib/format'
-import type { CreateResponse, SuggestResponse } from '../types'
+import type { SuggestResponse } from '../types'
 import { buttonPrimary, buttonSecondary, Card, Page } from '../components/ui'
 
 const input =
@@ -20,7 +20,7 @@ export default function NewCheck() {
   const [listingUrl, setListingUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [created, setCreated] = useState<CreateResponse | null>(null)
+  const [created, setCreated] = useState<CreateResult | null>(null)
   const [swapping, setSwapping] = useState(false)
   const [rejected, setRejected] = useState<string[]>([]) // labels dropped so far, never suggested again
   const [fresh, setFresh] = useState<Set<string>>(new Set()) // ids that just arrived ("New" tag)
@@ -287,7 +287,7 @@ function TestSkeleton({ itemName }: { itemName: string }) {
   )
 }
 
-function Created({ res, itemName }: { res: CreateResponse; itemName: string }) {
+function Created({ res, itemName }: { res: CreateResult; itemName: string }) {
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
@@ -318,6 +318,11 @@ function Created({ res, itemName }: { res: CreateResponse; itemName: string }) {
     <Page>
       <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-tight">Send this to the seller</h1>
       <p className="mt-1 text-muted">Paste it in your Marketplace or OfferUp chat. This page becomes the live report.</p>
+      {res.usedStandardTests && (
+        <p className="mt-4 rounded-xl bg-unv-soft px-4 py-3 text-sm text-unv" role="status">
+          AI-picked tests aren't supported by the server yet, so this check uses the standard tests for this category.
+        </p>
+      )}
 
       <Card className="mt-6 animate-row-in">
         <div className="mx-auto w-fit rounded-xl bg-white p-3">
