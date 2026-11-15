@@ -74,6 +74,14 @@ Read this after `showme/CLAUDE.md`. It says where the `agent/` work stands, what
    - Agent restarted 7:47 PM (`MOCK_VISION=1 SAVE_FRAMES=1`). `chert dev` could NOT restart: the line is `line_offline` (Chert's Mac not accepting). Get it fixed at the Chert table, then run `nohup npx -y @trychert/facetime@0.1.0-beta.21 dev >> logs/chert-dev.log 2>&1 &` in `agent/`.
    - `MONGODB_URI` and `GEMINI_API_KEY` are still empty in `../showme-vision/vision/.env`.
    - FaceTime minutes: 41 left at 7:30 PM.
+1c. **Status at about 8:40 PM: real vision is live on the laptop.**
+   - `dev` = `41ea40e` (Youngjun's final backend: camera mode default, 20 s Gemini timeout, 60 tests) plus the agent (`f1961ba`).
+   - Atlas Network Access is open (0.0.0.0/0); the laptop pings Atlas.
+   - `../showme-vision` at `41ea40e`, `vision/.env` has `MOCK=0`, `VISION_FRAME_MODE=camera`, `MONGODB_URI`, `GEMINI_API_KEY` (Mahir's Google key), `CHECK_TIMEOUT_SECONDS=20`. `/api/health` says `live`.
+   - Real Gemini test on cup frames (wrong item for every check): 3 `unverified`, 1 `failed`, 1.3–2.6 s each, report `complete` with liveness `failed`. Wrong answers never pass.
+   - Agent restarted with `MOCK_VISION=0 SAVE_FRAMES=1` (shell env overrides `.env.local`). `chert dev` restarted after one more `line_offline` that cleared in a minute.
+   - The Vultr server (showme.photo) still says `mode: mock`; Wan must redeploy and set `/etc/showme/vision.env`.
+   - Next: one live FaceTime call to check the crop and real judging together.
 2. **Real Gemini judging:** get Youngjun's `MONGODB_URI` (by DM), set `MOCK=0` and `GEMINI_API_KEY` in `../showme-vision/vision/.env`, restart uvicorn, and run the agent with `MOCK_VISION=0`. Wrong answers must come back `failed` or `unverified`.
 3. **Merge 1 at 8 PM:** end to end in a plain LiveKit room. Webcam, agent, real `vision/`, and `/v/<token>` updating live. Then merge the branches into `main` (Mahir's job).
 4. **Devpost draft by 10:30 PM** (hard cutoff 11:59 PM Saturday).
