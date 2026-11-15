@@ -1,4 +1,4 @@
-"""Contract v5: selected tests only, minimum three, and final-attempt semantics."""
+"""Contract v5: selected tests only, minimum two, and final-attempt semantics."""
 import pytest
 import mongomock
 from fastapi.testclient import TestClient
@@ -9,10 +9,17 @@ from vision.main import create_app
 from vision.store import MongoStore
 
 
-@pytest.mark.parametrize('tests', [[], ['power_on'], ['power_on', 'serial']])
-def test_minimum_three_not_bypassed_by_custom(client, tests):
+@pytest.mark.parametrize('tests', [[], ['power_on']])
+def test_minimum_two_not_bypassed_by_custom(client, tests):
     r = client.post('/api/requests', json=dict(item_name='Controller', category='console', tests=tests, custom_test='Show the cable.'))
     assert r.status_code == 422
+
+
+def test_two_selected_tests_are_enough(client):
+    response = client.post('/api/requests', json=dict(item_name='Item', category='other', tests=['power_on', 'serial']))
+    assert response.status_code == 200
+    challenges = client.post('/api/agent/requests/' + response.json()['request_id'] + '/start', headers=HEAD).json()['challenges']
+    assert len(challenges) == 2
 
 
 def test_three_unique_standard_suggested_or_mixed(client):

@@ -2,7 +2,7 @@
 
 v5.1 adds authoritative configurable overall scoring (default 60%) without changing individual verdicts or existing routes.
 
-Approved coordinated UX update: new inspections run only the buyer's selected tests, require at least three selections, and preserve retry history. v4 full-object tests and v3 catalog IDs remain supported subject to the new minimum. Completed historical reports remain readable and are never rewritten.
+Approved coordinated UX update: new inspections run only the buyer's selected tests, require at least two selections, and preserve retry history. v4 full-object tests and v3 catalog IDs remain supported subject to the new minimum. Completed historical reports remain readable and are never rewritten.
 
 All routes are served under `/api`. Vision service base URL: `VISION_URL`.
 
@@ -10,7 +10,7 @@ All routes are served under `/api`. Vision service base URL: `VISION_URL`.
 
 `shared/tests.json` contains category arrays (`console`, `phone`, `laptop`, `other`) of `{ id, label, prompt, expect }`.
 
-- New requests require **3–20 distinct selected tests**. An optional `custom_test` is additional and does not replace the three selections.
+- New requests require **2–20 distinct selected tests**. An optional `custom_test` is additional and does not replace the two selections.
 - A selected test may be a category catalog ID or a full `{ id, label, prompt, expect }` object. Mixed arrays are accepted; IDs must remain unique after normalization.
 - Prompts use short everyday English and one clear instruction at a time. `expect` preserves the evidence needed for evaluation.
 - There are **no random surprise/liveness challenges** in new inspections.
@@ -38,7 +38,7 @@ POST /requests
   body: { item_name, category: "console"|"phone"|"laptop"|"other", listing_url?,
           tests: [test_id | {id,label,prompt,expect}], custom_test? }
   → { request_id, token, code, link_url, line_number, status: "awaiting_seller", expires_at }
-  Fewer than three selected tests or duplicate IDs → HTTP 422. Link lifetime: 24 hours.
+  Fewer than two selected tests or duplicate IDs → HTTP 422. Link lifetime: 24 hours.
 
 GET /requests/{token}
   → { status: "awaiting_seller"|"in_call"|"complete"|"expired",
@@ -67,7 +67,7 @@ GET /requests/{token}
 - `passed_tests` counts each final passed selected test once, regardless of failed earlier attempts. FAILED, UNVERIFIED and unperformed selected tests count as not passed. Finishing an incomplete call retains those tests in the denominator.
 - `pass_percentage = passed_tests / total_selected_tests * 100`.
 - `overall_verdict` is `passed` when the **unrounded** percentage is at least `passing_threshold_percent`; otherwise `failed`. Zero selected tests always yield 0% and failed. No individual verdict is upgraded by the aggregate score.
-- Backend `PASSING_THRESHOLD_PERCENT` defaults to **60**, must be finite and greater than 0 and at most 100, and is supplied to the frontend in the summary. For three selections, two passes (66.67%) meet 60%; with five selections, three passes meet 60% exactly.
+- Backend `PASSING_THRESHOLD_PERCENT` defaults to **60**, must be finite and greater than 0 and at most 100, and is supplied to the frontend in the summary. For two selections, both must pass (one pass is 50%); for three selections, two passes (66.67%) meet 60%; with five selections, three passes meet 60% exactly.
 - New summary score fields are saved inside the existing MongoDB `summary` at finish. The threshold is a snapshot: later configuration changes do not rescore those reports. Both finish and public GET return that same authoritative snapshot.
 - Existing completed documents without these fields need no migration or writes: the backend adds a derived score on read using the current configured threshold. Stored counts, individual outcomes, histories and legacy liveness fields are preserved. Old-server responses without scoring fields remain readable by the frontend using legacy banners.
 - The report displays the overall verdict, percentage, and selected passed/total counts alongside every individual result. If overall passes but any individual check failed or was unverified, show an explicit warning. Historical liveness warnings remain visible separately; they do not change the selected-test percentage.

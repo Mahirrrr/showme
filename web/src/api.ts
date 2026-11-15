@@ -1,4 +1,4 @@
-import { canSubmitSelection } from './lib/selection'
+import { canSubmitSelection, MIN_TESTS } from './lib/selection'
 // The only place the web app talks to the API (shared/contract.md).
 // VITE_MOCK=1 serves shared/mock_request.json instead of fetching.
 //   /v/<token>?state=awaiting_seller|in_call|complete|complete_recording|expired
@@ -50,7 +50,7 @@ export type CreateResult = CreateResponse
 /** Never substitute other tests after validation fails: preserve the buyer's choices. */
 export async function createRequest(body: CreateRequestBody): Promise<CreateResult> {
   if (!canSubmitSelection(body.tests.length) || new Set(body.tests.map(t => t.id)).size !== body.tests.length) {
-    throw new ApiError(422, 'Select at least 3 different verification tests.')
+    throw new ApiError(422, `Select at least ${MIN_TESTS} different verification tests.`)
   }
   if (import.meta.env.VITE_MOCK === '1') return mockCreate()
   return request<CreateResponse>('/requests', { method: 'POST', body: JSON.stringify(body) })
