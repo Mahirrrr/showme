@@ -44,3 +44,40 @@ export function makeCodeListener({ now = Date.now, keepMs = 20000 } = {}) {
     },
   };
 }
+
+// ---------- voice commands: FaceTime can't send taps to the agent, so the seller says them.
+const COMMANDS = [
+  ['skip', /\b(skip|next|move on)\b/],
+  ['again', /\b(again|repeat|retry|redo)\b/],
+  ['ready', /\b(ready|done|check (it )?now|look now|go ahead)\b/],
+];
+
+/**
+ * "skip" | "again" | "ready" | null. Only short phrases (5 words or fewer) count, so chatter like
+ * "I tried that before, again and again" never triggers anything.
+ */
+export function parseCommand(transcript) {
+  const text = String(transcript || '').toLowerCase().replace(/[^a-z' ]/g, ' ').trim();
+  if (!text || text.split(/\s+/).length > 5) return null;
+  for (const [command, re] of COMMANDS) if (re.test(text)) return command;
+  return null;
+}
+
+/** The latest command the seller said. wait(ms) resolves with it as soon as one arrives, or null after ms. */
+export function makeCommandListener() {
+  let pending = null, waiter = null;
+  return {
+    heard(command) {
+      if (!command) return;
+      if (waiter) { const w = waiter; waiter = null; w(command); } else pending = command;
+    },
+    clear() { pending = null; },
+    wait(ms) {
+      if (pending) { const c = pending; pending = null; return Promise.resolve(c); }
+      return new Promise(resolve => {
+        const t = setTimeout(() => { waiter = null; resolve(null); }, ms);
+        waiter = c => { clearTimeout(t); resolve(c); };
+      });
+    },
+  };
+}
