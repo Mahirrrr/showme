@@ -327,6 +327,8 @@ test('orderChallenges: Gemini-picked tests (not in the catalog) still go power o
 test('hintFor: short on-screen guidance from the verdict', () => {
   assert.match(hintFor({ result: 'unverified', reason: 'No serial number or model label is visible.' }), /^Not clear yet: No serial number/);
   assert.match(hintFor({ result: 'failed', reason: 'The hand is not on top of the item.' }), /^Not yet: The hand/);
+  assert.equal(hintFor({ result: 'unverified', reason: 'The images show a desk, but no battery screen.' }), 'Not clear yet: I see a desk, but no battery screen.');
+  assert.equal(hintFor({ result: 'failed', reason: 'The video shows the stool upright.' }), 'Not yet: I see the stool upright.');
   const long = hintFor({ result: 'unverified', reason: 'word '.repeat(60) });
   assert.ok(long.length <= 100 && long.endsWith('…'));
   assert.equal(hintFor({ result: 'unverified', reason: '' }), 'Not clear yet. Hold it steady, closer to the camera.');

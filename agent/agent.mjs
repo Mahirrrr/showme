@@ -78,6 +78,8 @@ const agent = defineAgent({
           apiKey: process.env.ELEVENLABS_API_KEY,
           voiceId: process.env.ELEVENLABS_VOICE_ID || undefined,
           model: 'eleven_flash_v2_5',
+          // A bit faster than normal speech (ElevenLabs allows 0.7 to 1.2). TTS_SPEED overrides it.
+          voiceSettings: { stability: 0.5, similarity_boost: 0.75, speed: Number(process.env.TTS_SPEED) || 1.15 },
         }),
       });
     const codes = makeCodeListener();

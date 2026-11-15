@@ -47,7 +47,8 @@ export function orderChallenges(challenges, catalog = {}) {
 /** On-screen guidance after a check that didn't pass: vision's reason, short enough for the card. */
 export function hintFor(verdict, max = 100) {
   const lead = verdict.result === 'failed' ? 'Not yet' : 'Not clear yet';
-  const reason = say1(verdict.reason ?? '');
+  // Gemini writes about "the images"; the seller is looking through a camera, so say what the agent sees.
+  const reason = say1(verdict.reason ?? '').replace(/^the (images?|frames?|video|photos?|pictures?) (show|shows|depict|depicts)\s+/i, 'I see ');
   if (!reason) return `${lead}. Hold it steady, closer to the camera.`;
   const text = `${lead}: ${reason}`;
   if (text.length <= max) return text;
