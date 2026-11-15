@@ -2,9 +2,7 @@
 
 > **Current Contract v5.1 update:** New inspections contain only buyer-selected tests (minimum three) and an optional custom test. No surprise challenges are generated. `summary.liveness` is `not_run`; historical reports retain their original liveness status. Attempts 1–3 retain metadata-only history and the final saved attempt determines the verdict. The agent announces retries, allows 12 seconds to act, uses a 30-second HTTP timeout, and reserves 15 seconds for finish within the 4:30 call budget. The backend snapshots the overall selected-test percentage and threshold (default 60%) in the existing summary; frontend and agent consume that verdict without upgrading individual results. See `shared/contract.md`; older liveness diagrams/examples below are historical.
 
-This is the technical design for the flow in `SHOWME_PLAN.md`. It covers:
-- the API contract (`SHOWME_PLAN.md`, section 5, which stays the only source of truth for the API);
-- who owns what, and the schedule (`SHOWME_PLAN.md`, sections 6 and 10).
+This is the technical design for ShowMe. The API contract is `shared/contract.md`, the only source of truth for routes and shapes.
 
 Read this file to know **what each piece is, where it runs, and how the pieces talk to each other**.
 
@@ -334,7 +332,7 @@ flowchart TB
 | The call is about to hit the 5-minute cap | agent 4:30 guard | Finish with whatever is done; untested challenges become `unverified` |
 | A recording is held up to the camera | vision liveness `expect` | Liveness `failed`, and the report gets the red "possible recording" banner |
 | The vision server goes down | agent / web | The agent uses `MOCK_VISION=1` (a demo fallback, said honestly); the web shows "Can't reach ShowMe, retrying" |
-| No network at the judging table | everyone | Laptop hotspot, then a plain LiveKit room, then mock mode, then the backup video (`SHOWME_PLAN.md`, section 7) |
+| No network at the judging table | everyone | Laptop hotspot, then a plain LiveKit room, then mock mode, then the backup video |
 
 ---
 
@@ -343,4 +341,4 @@ flowchart TB
 - **Add `POST /api/agent/requests/{id}/abort`** (agent only). It takes `in_call` back to `awaiting_seller` and clears partial results. Without it, a dropped call leaves the request stuck.
 - **Every route now lives under `/api`,** because nginx serves the web app at `/` and the API at `/api`.
 
-Both changes are also written into `SHOWME_PLAN.md`, section 5.
+Both changes are in `shared/contract.md`.

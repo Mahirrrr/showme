@@ -1,6 +1,6 @@
 # agent/ (Mahir)
 
-The ShowMe FaceTime agent, built on Chert's video starter (`CHERT_STARTER.md`, `AGENTS.md`). Design: `docs/ARCHITECTURE.md`, section 4.
+The ShowMe FaceTime agent, built on Chert's video starter (`chert new`). Design: `docs/ARCHITECTURE.md`, section 4.
 
 | File | What it does |
 |---|---|

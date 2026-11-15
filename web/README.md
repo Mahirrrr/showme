@@ -1,6 +1,6 @@
 # web/ (Wan)
 
-React + Vite + TypeScript + Tailwind v4. Pages: `/`, `/new`, `/v/:token`. Start with `docs/WAN.md`.
+React + Vite + TypeScript + Tailwind v4. Pages: `/`, `/new`, `/v/:token`.
 
 ## Run
 

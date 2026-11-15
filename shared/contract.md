@@ -4,7 +4,7 @@ v5.1 adds authoritative configurable overall scoring (default 60%) without chang
 
 Approved coordinated UX update: new inspections run only the buyer's selected tests, require at least three selections, and preserve retry history. v4 full-object tests and v3 catalog IDs remain supported subject to the new minimum. Completed historical reports remain readable and are never rewritten.
 
-This contract is also included in `docs/SHOWME_PLAN.md`, section 5. All routes are served under `/api`. Vision service base URL: `VISION_URL`.
+All routes are served under `/api`. Vision service base URL: `VISION_URL`.
 
 ## Test selection and instructions
 
