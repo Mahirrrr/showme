@@ -163,6 +163,14 @@ test('makeCallerEncoder: crops FaceTime frames, remembers the strip, passes othe
 });
 
 // ---------- vision HTTP client
+test('http vision: check waits up to 30 s (Gemini can take 20 s), other calls 6 s', async () => {
+  const timeouts = [];
+  const fetchImpl = async () => new Response('{}', { status: 200 });
+  const v = makeHttpVision({ url: 'http://x/api', key: 'k', fetchImpl, signalFor: ms => { timeouts.push(ms); return undefined; } });
+  await v.check({ frames: [] });
+  await v.start('r1');
+  assert.deepEqual(timeouts, [30000, 6000]);
+});
 test('http vision: sends the agent key, maps 404 to null, wraps errors', async () => {
   const seen = [];
   const fetchImpl = async (url, opts) => {
@@ -181,7 +189,7 @@ test('http vision: sends the agent key, maps 404 to null, wraps errors', async (
 });
 
 // ---------- call flow
-function harness({ codes = ['4827'], frames = ['jpg'], results, checkThrows = false, clockStep = 0 } = {}) {
+function harness({ codes = ['4827'], frames = ['jpg', 'jpg'], results, checkThrows = false, clockStep = 0 } = {}) {
   const said = [], shown = [];
   let t = 0;
   const vision = makeMockVision({ results });
@@ -238,6 +246,12 @@ test('flow: no camera frames never reach vision and end unverified', async () =>
   assert.equal(h.vision.calls.filter(c => c.name === 'check').length, 0);
   assert.ok(state.results.every(r => r.result === 'unverified'));
   assert.ok(h.said.some(s => s.includes("can't see")));
+});
+test('flow: a single frame is not enough (contract: 2 to 4 frames), so it never reaches vision', async () => {
+  const h = harness({ frames: ['only-one'] });
+  const state = await runCall(h.deps);
+  assert.equal(h.vision.calls.filter(c => c.name === 'check').length, 0);
+  assert.ok(state.results.every(r => r.result === 'unverified'));
 });
 test('flow: call budget stops early but still finishes the report', async () => {
   const h = harness({ clockStep: 60_000 }); // each spoken line "takes" a minute
