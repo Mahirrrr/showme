@@ -5,12 +5,13 @@ export class VisionError extends Error {}
 const MOCK_REQUEST = { request_id: 'req_demo_001', item_name: 'PS4 controller', status: 'awaiting_seller' };
 const MOCK_CHALLENGES = [
   { id: 'power_on', kind: 'buyer', prompt: 'Turn it on and show the screen or power light', expect: 'device visibly powered on' },
-  { id: 'live_fingers', kind: 'liveness', prompt: 'Hold up 3 fingers next to it', expect: 'exactly 3 fingers beside the item' },
+  { id: 'serial', kind: 'buyer', prompt: 'Show the serial label up close.', expect: 'a readable serial label' },
   { id: 'buttons', kind: 'buyer', prompt: 'Press each button while the screen shows it responding', expect: 'on-screen response to button presses' },
 ];
 
 export function makeMockVision({ results = {} } = {}) {
   const calls = [];
+  const latest = new Map();
   const rec = (name, args) => { calls.push({ name, args }); };
   return {
     calls,
@@ -21,9 +22,11 @@ export function makeMockVision({ results = {} } = {}) {
       rec('check', { ...body, frames: body.frames.length });
       const r = results[body.challenge_id] ?? 'passed';
       const result = Array.isArray(r) ? r[Math.min(body.attempt - 1, r.length - 1)] : r;
-      return { result, confidence: result === 'passed' ? 0.9 : 0.5, reason: `mock ${result}`, best_frame: 0 };
+      const verdict = { result, confidence: result === 'passed' ? 0.9 : 0.5, reason: `mock ${result}`, best_frame: 0 };
+      latest.set(body.challenge_id, verdict);
+      return verdict;
     },
-    async finish(id) { rec('finish', id); return { summary: { passed: 3, failed: 0, unverified: 0, total: 3, liveness: 'passed' }, link_url: 'http://localhost:5173/v/k3v9xq', notify_chat_ids: [] }; },
+    async finish(id) { rec('finish', id); const outcomes = MOCK_CHALLENGES.map(c => latest.get(c.id)?.result ?? 'unverified'); return { summary: { ...Object.fromEntries(['passed', 'failed', 'unverified'].map(r => [r, outcomes.filter(x => x === r).length])), total: MOCK_CHALLENGES.length, liveness: 'not_run' }, link_url: 'http://localhost:5173/v/k3v9xq', notify_chat_ids: [] }; },
     async abort(id) { rec('abort', id); return { ok: true }; },
   };
 }

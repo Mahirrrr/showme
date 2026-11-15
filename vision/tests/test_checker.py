@@ -73,7 +73,7 @@ class FailingLiveness:
         pass
 
 
-def test_failed_liveness_overrides_buyer_pass(frames):
+def test_no_liveness_has_not_run_summary(frames):
     with TestClient(create_app(Settings(mock=True, agent_key='test-key'), checker=FailingLiveness())) as client:
         d = create(client)
         root = '/api/agent/requests/' + d['request_id']
@@ -81,8 +81,8 @@ def test_failed_liveness_overrides_buyer_pass(frames):
         for c in checks:
             client.post('/api/agent/check', headers=HEAD, json=dict(request_id=d['request_id'], challenge_id=c['id'], attempt=1, frames=frames))
         result = client.post(root + '/finish', headers=HEAD).json()['summary']
-        assert result['passed'] == 1
-        assert result['liveness'] == 'failed'
+        assert result['passed'] == 3
+        assert result['liveness'] == 'not_run'
 
 
 def test_timeout_defaults_and_environment_override(monkeypatch):

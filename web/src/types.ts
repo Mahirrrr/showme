@@ -1,4 +1,4 @@
-// Shapes from shared/contract.md (API contract v3). Keep in sync with that file only.
+// Shapes from shared/contract.md (API contract v5). Keep in sync with that file only.
 
 export type Category = 'console' | 'phone' | 'laptop' | 'other'
 export type Status = 'awaiting_seller' | 'in_call' | 'complete' | 'expired'
@@ -17,7 +17,7 @@ export interface TestSpec extends TestRef {
   expect: string
 }
 
-/** POST /api/tests/suggest (PROPOSED, contract v4) */
+/** POST /api/tests/suggest (contract v5) */
 export interface SuggestBody {
   item_name: string
   category?: Category
@@ -43,6 +43,7 @@ export interface CheckResult {
   confidence: number
   reason: string
   attempts: number
+  attempt_history?: { attempt: number; result: Verdict; confidence: number; reason: string }[]
   thumb_url?: string | null
 }
 
@@ -51,7 +52,7 @@ export interface Summary {
   failed: number
   unverified: number
   total: number
-  liveness: 'passed' | 'failed'
+  liveness: 'passed' | 'failed' | 'not_run'
 }
 
 /** GET /api/requests/{token} */
@@ -71,7 +72,7 @@ export interface RequestView {
   verified_at?: string | null
 }
 
-/** POST /api/requests body (PROPOSED v4: full test objects instead of test ids) */
+/** POST /api/requests body (v5: at least three selected tests) */
 export interface CreateRequestBody {
   item_name: string
   category: Category

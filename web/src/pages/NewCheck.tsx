@@ -1,3 +1,4 @@
+import { canSubmitSelection, selectionMessage } from '../lib/selection'
 import { QRCodeSVG } from 'qrcode.react'
 import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
@@ -100,7 +101,7 @@ export default function NewCheck() {
 
   const custom = customTest.trim()
   const canCreate =
-    suggestion !== null && !stale && !suggesting && !swapping && !busy && (selected.size > 0 || custom.length > 0)
+    suggestion !== null && !stale && !suggesting && !swapping && !busy && canSubmitSelection(selected.size)
 
   const create = async (e: FormEvent) => {
     e.preventDefault()
@@ -216,7 +217,7 @@ export default function NewCheck() {
               {unchecked.length === 0
                 ? 'Uncheck any test you don\'t want, then swap it for a new one. Checked tests stay.'
                 : `Checked tests stay. ${unchecked.length} unchecked will be replaced.`}{' '}
-              ShowMe also adds 1 or 2 secret surprise checks, so a recorded video can't pass.
+              Only the tests you choose will be requested during the call.
             </p>
           </fieldset>
 
@@ -257,6 +258,7 @@ export default function NewCheck() {
             </p>
           )}
 
+          <p role="status" aria-live="polite" className="text-sm text-muted">{selectionMessage(selected.size)}</p>
           <button type="submit" className={buttonPrimary} disabled={!canCreate}>
             {busy ? 'Creating…' : 'Create the check link'}
           </button>
@@ -318,11 +320,6 @@ function Created({ res, itemName }: { res: CreateResult; itemName: string }) {
     <Page>
       <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-tight">Send this to the seller</h1>
       <p className="mt-1 text-muted">Paste it in your Marketplace or OfferUp chat. This page becomes the live report.</p>
-      {res.usedStandardTests && (
-        <p className="mt-4 rounded-xl bg-unv-soft px-4 py-3 text-sm text-unv" role="status">
-          AI-picked tests aren't supported by the server yet, so this check uses the standard tests for this category.
-        </p>
-      )}
 
       <Card className="mt-6 animate-row-in">
         <div className="mx-auto w-fit rounded-xl bg-white p-3">

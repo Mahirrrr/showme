@@ -1,5 +1,7 @@
 # ShowMe: architecture
 
+> **Current Contract v5 update:** New inspections contain only buyer-selected tests (minimum three) and an optional custom test. No surprise challenges are generated. `summary.liveness` is `not_run`; historical reports retain their original liveness status. Attempts 1–3 retain metadata-only history and the final saved attempt determines the verdict. The agent announces retries, allows 12 seconds to act, uses a 30-second HTTP timeout, and reserves 15 seconds for finish within the 4:30 call budget. See `shared/contract.md`; older liveness diagrams/examples below are historical.
+
 This is the technical design for the flow in `SHOWME_PLAN.md`. It covers:
 - the API contract (`SHOWME_PLAN.md`, section 5, which stays the only source of truth for the API);
 - who owns what, and the schedule (`SHOWME_PLAN.md`, sections 6 and 10).

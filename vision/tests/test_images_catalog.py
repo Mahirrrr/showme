@@ -14,18 +14,18 @@ def test_catalog_complete():
         assert all(set(t) == {'id', 'label', 'prompt', 'expect'} for t in entries)
 
 
-def test_random_challenges_and_custom():
+def test_selected_challenges_and_custom_only():
     variants = set()
     ids = set()
     for _ in range(30):
         checks = build_challenges({'category': 'console', 'tests': ['power_on'], 'custom_test': 'Show the cable'})
         assert sum(c['kind'] == 'buyer' for c in checks) == 1
         assert sum(c['kind'] == 'custom' for c in checks) == 1
-        assert 1 <= sum(c['kind'] == 'liveness' for c in checks) <= 2
+        assert not any(c['kind'] == 'liveness' for c in checks)
         assert not ids.intersection(c['id'] for c in checks)
         ids.update(c['id'] for c in checks)
         variants.add(tuple(c['prompt'] for c in checks))
-    assert len(variants) > 1
+    assert len(variants) == 1
 
 
 def test_crop_and_thumbnail(frames):

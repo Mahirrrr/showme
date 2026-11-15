@@ -1,6 +1,5 @@
 {
   "_note": "Fake data for every state of GET /api/requests/{token}, plus the POST /api/requests response. Build against this before the real API exists. Shapes follow shared/contract.md exactly.",
-
   "create_response": {
     "request_id": "req_demo_001",
     "token": "k3v9xq",
@@ -10,7 +9,6 @@
     "status": "awaiting_seller",
     "expires_at": "2026-11-15T22:30:00Z"
   },
-
   "awaiting_seller": {
     "status": "awaiting_seller",
     "item_name": "PS4 controller",
@@ -19,13 +17,21 @@
     "line_number": "+10000000000",
     "code": "4827",
     "tests": [
-      {"id": "power_on", "label": "Power on"},
-      {"id": "buttons", "label": "Press every button"},
-      {"id": "all_sides", "label": "Show all sides"}
+      {
+        "id": "power_on",
+        "label": "Power on"
+      },
+      {
+        "id": "buttons",
+        "label": "Press every button"
+      },
+      {
+        "id": "all_sides",
+        "label": "Show all sides"
+      }
     ],
     "results": []
   },
-
   "in_call": {
     "status": "in_call",
     "item_name": "PS4 controller",
@@ -33,17 +39,35 @@
     "listing_url": "https://example.com/listing/123",
     "line_number": "+10000000000",
     "tests": [
-      {"id": "power_on", "label": "Power on"},
-      {"id": "buttons", "label": "Press every button"},
-      {"id": "all_sides", "label": "Show all sides"}
+      {
+        "id": "power_on",
+        "label": "Power on"
+      },
+      {
+        "id": "buttons",
+        "label": "Press every button"
+      },
+      {
+        "id": "all_sides",
+        "label": "Show all sides"
+      }
     ],
-    "current_challenge": {"prompt": "Hold up 3 fingers next to it", "attempt": 1},
+    "current_challenge": {
+      "prompt": "Show the screen responding to each button.",
+      "attempt": 1
+    },
     "results": [
-      {"prompt": "Turn it on and show the screen or power light", "kind": "buyer", "result": "passed", "confidence": 0.93, "reason": "The light bar is lit blue.", "attempts": 1,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>power_on</text></svg>"}
+      {
+        "prompt": "Turn it on and show the screen or power light",
+        "kind": "buyer",
+        "result": "passed",
+        "confidence": 0.93,
+        "reason": "The light bar is lit blue.",
+        "attempts": 1,
+        "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>power_on</text></svg>"
+      }
     ]
   },
-
   "complete": {
     "status": "complete",
     "item_name": "PS4 controller",
@@ -51,44 +75,133 @@
     "listing_url": "https://example.com/listing/123",
     "line_number": "+10000000000",
     "tests": [
-      {"id": "power_on", "label": "Power on"},
-      {"id": "buttons", "label": "Press every button"},
-      {"id": "all_sides", "label": "Show all sides"}
+      {
+        "id": "power_on",
+        "label": "Power on"
+      },
+      {
+        "id": "buttons",
+        "label": "Press every button"
+      },
+      {
+        "id": "all_sides",
+        "label": "Show all sides"
+      }
     ],
     "results": [
-      {"prompt": "Turn it on and show the screen or power light", "kind": "buyer", "result": "passed", "confidence": 0.93, "reason": "The light bar is lit blue.", "attempts": 1,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>power_on</text></svg>"},
-      {"prompt": "Hold up 3 fingers next to it", "kind": "liveness", "result": "passed", "confidence": 0.88, "reason": "Three fingers are visible beside the controller.", "attempts": 1,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>3 fingers</text></svg>"},
-      {"prompt": "Press each button while the screen shows it responding", "kind": "buyer", "result": "failed", "confidence": 0.81, "reason": "The R2 press shows no response on screen.", "attempts": 2,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>buttons</text></svg>"},
-      {"prompt": "Turn it slowly to show every side", "kind": "buyer", "result": "unverified", "confidence": 0.42, "reason": "The back was too dark to see after 2 tries.", "attempts": 3,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>all_sides</text></svg>"}
+      {
+        "prompt": "Turn it on and show the screen or power light",
+        "kind": "buyer",
+        "result": "passed",
+        "confidence": 0.93,
+        "reason": "The light bar is lit blue.",
+        "attempts": 1,
+        "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>power_on</text></svg>"
+      },
+      {
+        "prompt": "Press each button while the screen shows it responding",
+        "kind": "buyer",
+        "result": "failed",
+        "confidence": 0.81,
+        "reason": "The R2 press shows no response on screen.",
+        "attempts": 2,
+        "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>buttons</text></svg>",
+        "attempt_history": [
+          {
+            "attempt": 1,
+            "result": "unverified",
+            "confidence": 0,
+            "reason": "Evidence was unclear."
+          },
+          {
+            "attempt": 2,
+            "result": "failed",
+            "confidence": 0.81,
+            "reason": "The R2 press shows no response on screen."
+          }
+        ]
+      },
+      {
+        "prompt": "Turn it slowly to show every side",
+        "kind": "buyer",
+        "result": "unverified",
+        "confidence": 0.42,
+        "reason": "The back was too dark to see after 2 tries.",
+        "attempts": 3,
+        "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>all_sides</text></svg>",
+        "attempt_history": [
+          {
+            "attempt": 1,
+            "result": "unverified",
+            "confidence": 0,
+            "reason": "Evidence was unclear."
+          },
+          {
+            "attempt": 2,
+            "result": "unverified",
+            "confidence": 0,
+            "reason": "Evidence was unclear."
+          },
+          {
+            "attempt": 3,
+            "result": "unverified",
+            "confidence": 0.42,
+            "reason": "The back was too dark to see after 2 tries."
+          }
+        ]
+      }
     ],
-    "summary": {"passed": 2, "failed": 1, "unverified": 1, "total": 4, "liveness": "passed"},
+    "summary": {
+      "passed": 1,
+      "failed": 1,
+      "unverified": 1,
+      "total": 3,
+      "liveness": "not_run"
+    },
     "verified_at": "2026-11-14T23:42:10Z"
   },
-
   "complete_recording": {
-    "_note": "The attack case: liveness failed, so the report must show the red 'Live check failed: possible recording' banner whatever the other results.",
+    "_note": "Historical pre-v5 report: retained to verify backward compatibility only. New inspections contain no surprise checks.",
     "status": "complete",
     "item_name": "PS4 controller",
     "category": "console",
     "listing_url": "https://example.com/listing/123",
     "line_number": "+10000000000",
     "tests": [
-      {"id": "power_on", "label": "Power on"}
+      {
+        "id": "power_on",
+        "label": "Power on"
+      }
     ],
     "results": [
-      {"prompt": "Turn it on and show the screen or power light", "kind": "buyer", "result": "passed", "confidence": 0.9, "reason": "The light bar is lit.", "attempts": 1,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>power_on</text></svg>"},
-      {"prompt": "Hold up 4 fingers next to it", "kind": "liveness", "result": "failed", "confidence": 0.86, "reason": "No hand appears; the scene does not react to the request.", "attempts": 3,
-       "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23ffcdd2'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23b71c1c'>no hand</text></svg>"}
+      {
+        "prompt": "Turn it on and show the screen or power light",
+        "kind": "buyer",
+        "result": "passed",
+        "confidence": 0.9,
+        "reason": "The light bar is lit.",
+        "attempts": 1,
+        "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23cfd8dc'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23455a64'>power_on</text></svg>"
+      },
+      {
+        "prompt": "Hold up 4 fingers next to it",
+        "kind": "liveness",
+        "result": "failed",
+        "confidence": 0.86,
+        "reason": "No hand appears; the scene does not react to the request.",
+        "attempts": 3,
+        "thumb_url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%25' height='100%25' fill='%23ffcdd2'/><text x='50%25' y='50%25' font-size='28' text-anchor='middle' fill='%23b71c1c'>no hand</text></svg>"
+      }
     ],
-    "summary": {"passed": 1, "failed": 1, "unverified": 0, "total": 2, "liveness": "failed"},
+    "summary": {
+      "passed": 1,
+      "failed": 1,
+      "unverified": 0,
+      "total": 2,
+      "liveness": "failed"
+    },
     "verified_at": "2026-11-14T23:50:02Z"
   },
-
   "expired": {
     "status": "expired",
     "item_name": "PS4 controller",

@@ -18,6 +18,8 @@
 
 ---
 
+> **Current v5 UX update:** Only buyer-selected tests run (minimum three), with clear instructions and up to two announced retries. New reports use `liveness: "not_run"`. Section 5 is current; earlier liveness/demo tasks and pitch language elsewhere below are historical planning and no longer describe the new flow.
+
 ## 1. What we are building
 
 **One line:** the buyer creates a verification link and sends it to the seller. The seller FaceTimes ShowMe, and the agent runs the buyer's chosen tests plus random live challenges. Gemini checks each one, and the same link turns into the inspection report.
@@ -165,88 +167,88 @@ showme/
 
 ---
 
-## 5. API contract v3 (lock it at 4:45 PM; change it only with all three people agreeing)
+## 5. API contract (current v5)
 
-Vision service base URL: `VISION_URL`. Youngjun owns it.
-- **Public routes** are called by the web app.
-- **Agent routes** need the header `X-Agent-Key`, so the public can never fetch the hidden liveness challenges.
+# API contract v5
 
-### Test catalog: `shared/tests.json`
+Approved coordinated UX update: new inspections run only the buyer's selected tests, require at least three selections, and preserve retry history. v4 full-object tests and v3 catalog IDs remain supported subject to the new minimum. Completed historical reports remain readable and are never rewritten.
 
-```json
-{
-  "console": [
-    {"id": "power_on",   "label": "Power on",              "prompt": "Turn it on and show the screen or power light", "expect": "device visibly powered on"},
-    {"id": "launch_game","label": "Launch a game",         "prompt": "Start a game and show it running on screen",    "expect": "a game running on the display"},
-    {"id": "buttons",    "label": "Press every button",    "prompt": "Press each button while the screen shows it responding", "expect": "on-screen response to button presses"},
-    {"id": "serial",     "label": "Show the serial label", "prompt": "Show the serial number label up close",          "expect": "a readable serial label"},
-    {"id": "all_sides",  "label": "Show all sides",        "prompt": "Turn it slowly to show every side",             "expect": "all sides, no major damage hidden"}
-  ],
-  "phone":   ["power_on", "about_screen (Settings > About: model and storage)", "battery_health", "imei (*#06#)", "screen_no_cracks", "apple_id_signed_out"],
-  "laptop":  ["power_on", "about_screen", "keyboard", "screen_no_dead_pixels", "all_sides"],
-  "other":   ["power_on", "serial", "all_sides"]
-}
-```
+This contract is also included in `docs/SHOWME_PLAN.md`, section 5. All routes are served under `/api`. Vision service base URL: `VISION_URL`.
 
-(Youngjun writes the full objects for every category. The lists above show what each category contains.)
+## Test selection and instructions
 
-**Liveness pool, server-side only:**
-- "hold up N fingers next to it" (N from 1 to 5, random)
-- "turn it upside down"
-- "put your flat hand on top"
-- "tap it twice"
+`shared/tests.json` contains category arrays (`console`, `phone`, `laptop`, `other`) of `{ id, label, prompt, expect }`.
 
-### Public routes (web)
+- New requests require **3–20 distinct selected tests**. An optional `custom_test` is additional and does not replace the three selections.
+- A selected test may be a category catalog ID or a full `{ id, label, prompt, expect }` object. Mixed arrays are accepted; IDs must remain unique after normalization.
+- Prompts use short everyday English and one clear instruction at a time. `expect` preserves the evidence needed for evaluation.
+- There are **no random surprise/liveness challenges** in new inspections.
+
+## Public routes
 
 ```
+POST /tests/suggest
+  body: { item_name, category?, keep?: [{id,label,prompt,expect}], exclude?: [label], count? }
+  → { category, tests: [{id,label,prompt,expect}], source: "gemini" | "catalog" }
+  Returns only new suggestions; keep/exclude are respected. Default count is 6 - keep.length.
+
 POST /requests
-  body: { item_name, category: "console"|"phone"|"laptop"|"other", listing_url?, tests: [test_id], custom_test? }
-  →     { request_id, token, code: "4827", link_url: "https://<domain>/v/<token>",
-          line_number, status: "awaiting_seller", expires_at }      (the link lasts 24 hours)
+  body: { item_name, category: "console"|"phone"|"laptop"|"other", listing_url?,
+          tests: [test_id | {id,label,prompt,expect}], custom_test? }
+  → { request_id, token, code, link_url, line_number, status: "awaiting_seller", expires_at }
+  Fewer than three selected tests or duplicate IDs → HTTP 422. Link lifetime: 24 hours.
 
-GET  /requests/{token}
-  →     { status: "awaiting_seller" | "in_call" | "complete" | "expired",
-          item_name, category, listing_url, line_number,
-          code,                         (only while status is "awaiting_seller")
-          tests: [ { id, label } ],     (the buyer's tests only; the liveness challenges are never listed here before the call)
-          current_challenge?: { prompt, attempt },     (while in_call: the live-progress view)
-          results: [ { prompt, kind: "buyer" | "liveness" | "custom",
-                       result: "passed" | "failed" | "unverified",
-                       confidence, reason, attempts, thumb_url } ],
-          summary?: { passed, failed, unverified, total, liveness: "passed" | "failed" },
-          verified_at? }
+GET /requests/{token}
+  → { status: "awaiting_seller"|"in_call"|"complete"|"expired",
+      item_name, category, listing_url, line_number,
+      code?,                            (only while awaiting_seller)
+      tests: [{id,label}],
+      current_challenge?: {prompt,attempt},
+      results: [{prompt, kind: "buyer"|"custom"|"liveness",
+                 result: "passed"|"failed"|"unverified",
+                 confidence, reason, attempts, thumb_url,
+                 attempt_history?: [{attempt,result,confidence,reason}]}],
+      summary?: {passed,failed,unverified,total,liveness: "not_run"|"passed"|"failed"},
+      verified_at? }
 ```
 
-### Agent routes (header `X-Agent-Key`)
+`kind: "liveness"` and `summary.liveness: "passed"|"failed"` are retained only for historical reports or already-running legacy inspections. New inspections return `liveness: "not_run"`, and contain buyer/custom results only. A new all-pass report says **All checks passed**, without claiming a separate liveness check occurred. Historical recording warnings continue to render.
+
+`attempts` is the final saved attempt number (1–3; 0 for unperformed checks). Optional `attempt_history` is ordered by attempt, contains no images, and is absent on older reports. The result, reason, confidence, and single thumbnail on the result row represent its **last saved attempt**. A failed initial attempt followed by a pass counts as one **passed** test, not a failed test. Summary totals count tests, never attempts.
+
+## Agent routes
+
+Every route below requires `X-Agent-Key`; missing or invalid keys return HTTP 401.
 
 ```
-GET  /agent/requests/by-code/{code}   → { request_id, item_name, status }  or 404
-GET  /agent/requests/latest-waiting   → the newest awaiting_seller request (fallback when the spoken code doesn't match)
-POST /agent/requests/{id}/start       → { challenges: [ { id, kind, prompt, expect } ] }
-                                        (the buyer's tests with 1 or 2 random liveness challenges mixed in; status becomes in_call)
+GET /agent/requests/by-code/{code} → {request_id,item_name,status} or 404
+GET /agent/requests/latest-waiting → newest awaiting_seller request, or 404
+POST /agent/requests/{id}/start → {challenges:[{id,kind,prompt,expect}]}
+  New inspections: only buyer-selected tests and optional custom test. No surprise checks.
+  Status becomes in_call; retrying start returns the same challenges.
+
 POST /agent/check
-  body: { request_id, challenge_id, attempt, frames: [base64 jpeg, 2 to 4 frames from the last 2 seconds] }
-  →     { result: "passed" | "failed" | "unverified", confidence: 0-1, reason, best_frame }
-POST /agent/requests/{id}/finish      → { summary, link_url, notify_chat_ids: [ ... ] }
-POST /agent/requests/watch            body: { code, chat_id }  → { ok }   (from an iMessage "WATCH 4827")
-POST /agent/requests/{id}/abort       → { ok }   (the call dropped before finish: status goes back to awaiting_seller, partial results are cleared, the code works again)
+  body: {request_id,challenge_id,attempt,frames:[base64 JPEG]}
+  → {result:"passed"|"failed"|"unverified",confidence,reason,best_frame}
+  Frames: 2–4 fresh frames from the last two seconds. best_frame is zero-based.
+
+POST /agent/requests/{id}/finish → {summary,link_url,notify_chat_ids:[...]}
+POST /agent/requests/watch   body:{code,chat_id} → {ok}
+POST /agent/requests/{id}/abort → {ok}
+  Aborting clears partial results/history and restores awaiting_seller until expiry.
 ```
 
-**Every route is served under `/api`** (for example `/api/requests`, `/api/agent/check`). nginx serves the web app at `/` and proxies `/api` to uvicorn, so the web app calls its own domain and needs no CORS setup. The full design is in `ARCHITECTURE.md`.
+## Retries, timing, security and privacy
 
-### Rules
-- **Results:**
-  - `passed` needs confidence ≥ 0.7.
-  - Each challenge gets up to 2 retries of 15 seconds.
-  - After the retries, Gemini's "can't see it" becomes `unverified`, and a visible contradiction becomes `failed`.
-  - A **failed liveness challenge** makes the report say **"Live check failed: possible recording"** at the top, whatever the other results.
-- **Linking the call:** the agent asks "What's your 4-digit code?" The starter's speech-to-text gets the transcript, and we match it with `by-code`. If that fails, the agent asks once more, then uses `latest-waiting`.
-- **Call length:** the target is about 2 minutes. The agent ends the call itself by 4:30.
-- **Privacy:**
-  - Store one small thumbnail per check, at most 400 px wide, as base64 in the result.
-  - Drop every other frame right after its check.
-  - The report never shows the seller's phone number.
-- **Mock mode:** `MOCK=1` makes `vision/` serve `mock_request.json` and canned results. `MOCK_VISION=1` makes the agent skip HTTP. The whole demo can run without Gemini or the network.
+- One initial evaluation plus **up to two retries**, using sequential attempt numbers 1–3. Stop on a pass. Repeating an already-saved attempt returns the same verdict without duplicating history or re-evaluating.
+- Sellers hear clear retry instructions and see **Try N of 3**. Allow 12 seconds to act after each instruction; do not compress all attempts into the previous 30-second challenge window.
+- Evaluation deadline: configured by `CHECK_TIMEOUT_SECONDS`, default **20 seconds**. Agent HTTP timeout for `/agent/check`: **30 seconds**.
+- The agent checks the remaining overall **4:30 call budget** before each evaluation, reserving 15 seconds for finish/goodbye. The budget can prevent another attempt; unperformed checks become unverified on finish. Do not imply every slow check is guaranteed three attempts.
+- HTTP transport retries reuse an uncertain attempt number; they must not skip directly to the next evaluation attempt.
+- A pass requires confidence ≥0.7. Inadequate or missing evidence is unverified; a visible contradiction is failed. Provider failures never become mock passes.
+- Agent-cropped camera mode remains the default. Metadata removal, optional explicit FaceTime screenshot sanitization, image bounds, and ≤400 px thumbnails remain enforced before model submission/storage.
+- Keep at most one sanitized thumbnail per test; replace it on retry. No source frames or historical thumbnails in attempt history. Never expose seller phone numbers, Mongo IDs, watcher IDs, or internal challenge criteria in public reports.
+- `MOCK=1` retains the in-memory backend and explicit canned verdicts. Authentication is required in mock mode too. Historical mock fixtures are labeled as legacy.
 
 ---
 

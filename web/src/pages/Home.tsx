@@ -6,7 +6,7 @@ const STEPS = [
   { title: 'Send the link', body: 'The seller opens it and FaceTimes ShowMe. No app, no account.' },
   {
     title: 'Watch it live',
-    body: 'AI checks each test plus secret surprise requests, so a recorded video fails.',
+    body: 'The seller follows your selected tests. AI checks the camera evidence.',
   },
 ]
 

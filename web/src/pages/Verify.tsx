@@ -93,7 +93,7 @@ function Awaiting({ view }: { view: RequestView }) {
           {[
             'Tap FaceTime ShowMe and point your camera at the item.',
             'Say your 4-digit code when asked.',
-            'Follow each prompt. Expect a couple of quick surprise requests too.',
+            'Follow each instruction. You can try a check again up to two times.',
           ].map((step, i) => (
             <li key={i} className="flex gap-3">
               <span className="grid size-6 shrink-0 place-items-center rounded-full bg-page text-xs font-semibold">
@@ -231,9 +231,19 @@ function ResultRow({ r }: { r: CheckResult }) {
         </div>
         <p className="mt-1 text-sm leading-snug text-muted wrap-break-word">{r.reason}</p>
         <p className="mt-1.5 text-xs text-faint">
-          {r.kind === 'liveness' ? 'Surprise check' : r.kind === 'custom' ? "Buyer's own test" : 'Buyer test'}
+          {r.kind === 'liveness' ? 'Legacy liveness check' : r.kind === 'custom' ? "Buyer's own test" : 'Buyer test'}
           {r.attempts > 1 && ` · ${r.attempts} tries`}
         </p>
+        {r.attempt_history && r.attempt_history.length > 1 && (
+          <details className="mt-2 text-sm text-muted">
+            <summary className="cursor-pointer">View {r.attempt_history.length} attempts</summary>
+            <ol className="mt-2 space-y-2">
+              {r.attempt_history.map(h => (
+                <li key={h.attempt}>Try {h.attempt}: <VerdictBadge verdict={h.result} /> <span>{h.reason}</span></li>
+              ))}
+            </ol>
+          </details>
+        )}
       </div>
     </li>
   )

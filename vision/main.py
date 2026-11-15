@@ -41,7 +41,7 @@ class CreateRequest(Input):
     category: Literal['console', 'phone', 'laptop', 'other']
     listing_url: str | None = Field(default=None, max_length=2048)
     # v3: catalog IDs. v4: full test objects (e.g. from /api/tests/suggest). Both may be mixed.
-    tests: list[str | TestSpec] = Field(max_length=20)
+    tests: list[str | TestSpec] = Field(min_length=3, max_length=20)
     custom_test: str | None = Field(default=None, min_length=1, max_length=500)
 
     @field_validator('listing_url')
@@ -62,8 +62,6 @@ class CreateRequest(Input):
         keys = [t if isinstance(t, str) else t.id for t in self.tests]
         if len(set(keys)) != len(keys):
             raise ValueError('Tests must be unique')
-        if not self.tests and not self.custom_test:
-            raise ValueError('Choose at least one test or custom_test')
         return self
 
     def test_specs(self):
@@ -93,8 +91,16 @@ def public_view(doc, settings):
     else:  # v3 documents
         catalog = {t['id']: t for t in CATALOG[doc['category']]}
         view['tests'] = [{'id': t, 'label': catalog[t]['label']} for t in doc['tests']]
-    view['results'] = [{**{k: r[k] for k in ('prompt', 'kind', 'result', 'confidence', 'reason', 'attempts')},
-                        'thumb_url': r.get('thumb', '')} for r in doc['results']]
+    view['results'] = []
+    for row in doc['results']:
+        result = {k: row[k] for k in ('prompt', 'kind', 'result', 'confidence', 'reason', 'attempts')}
+        result['thumb_url'] = row.get('thumb', '')
+        if 'attempt_history' in row:
+            result['attempt_history'] = [
+                {k: attempt[k] for k in ('attempt', 'result', 'confidence', 'reason')}
+                for attempt in row['attempt_history']
+            ]
+        view['results'].append(result)
     if doc['status'] == 'awaiting_seller':
         view['code'] = doc['code']
     if doc['status'] == 'in_call' and doc.get('current_challenge'):
@@ -130,7 +136,7 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
                 await app.state.suggester.close()
             await run_in_threadpool(app.state.store.close)
 
-    app = FastAPI(title='ShowMe Vision', version='3', lifespan=lifespan)
+    app = FastAPI(title='ShowMe Vision', version='5', lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
@@ -263,6 +269,7 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
             return {'challenges': doc['challenges']}  # safe retry, no new randomization
         if doc['status'] != 'awaiting_seller':
             raise HTTPException(409, 'Request is not awaiting seller')
+        doc['inspection_version'] = 5
         doc['challenges'] = build_challenges(doc)
         doc['status'] = 'in_call'
         doc['call_id'] = secrets.token_urlsafe(16)
@@ -325,6 +332,10 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
             existing = next((r for r in fresh['results'] if r['challenge_id'] == body.challenge_id), None)
             if existing and existing['attempts'] >= body.attempt:
                 return existing['verdict']
+            history = list(existing.get('attempt_history', [])) if existing else []
+            if existing and not history:  # resume a pre-v5 call without losing its last attempt
+                history.append(dict(attempt=existing['attempts'], **{k: existing[k] for k in ('result', 'confidence', 'reason')}))
+            result['attempt_history'] = history + [dict(attempt=body.attempt, **{k: result[k] for k in ('result', 'confidence', 'reason')})]
             fresh['results'] = [r for r in fresh['results'] if r['challenge_id'] != body.challenge_id] + [result]
             try:
                 await run_in_threadpool(storage().save, fresh)
@@ -346,7 +357,10 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
             results = doc['results']
             summary = {state: sum(r['result'] == state for r in results) for state in ('passed', 'failed', 'unverified')}
             liveness = [r for r in results if r['kind'] == 'liveness']
-            summary.update(total=len(results), liveness='passed' if liveness and all(r['result'] == 'passed' for r in liveness) else 'failed')
+            liveness_status = 'not_run'
+            if liveness:  # already-running legacy calls retain their original semantics
+                liveness_status = 'passed' if all(r['result'] == 'passed' for r in liveness) else 'failed'
+            summary.update(total=len(results), liveness=liveness_status)
             doc.update(summary=summary, status='complete', verified_at=now())
             doc.pop('current_challenge', None)
             doc.pop('active_code', None)
@@ -381,7 +395,7 @@ def seed_mock(store):
             tests=[t['id'] for t in source['tests']], custom_test=None, status=source['status'], challenges=[], results=[],
             watch_chat_ids=[], created_at=now() - timedelta(hours=1), expires_at=now() + timedelta(hours=23))
         doc['results'] = [{**{k: r[k] for k in ('prompt', 'kind', 'result', 'confidence', 'reason', 'attempts')},
-                           'thumb': r['thumb_url'], 'challenge_id': 'mock-' + str(i)} for i, r in enumerate(source['results'])]
+                           'thumb': r['thumb_url'], 'challenge_id': 'mock-' + str(i), **({'attempt_history': r['attempt_history']} if 'attempt_history' in r else {})} for i, r in enumerate(source['results'])]
         for key in ('summary', 'verified_at', 'current_challenge'):
             if key in source:
                 doc[key] = source[key]

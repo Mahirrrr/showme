@@ -35,19 +35,19 @@ def start(client, body):
 
 
 def test_v4_objects_drive_view_and_challenges(client):
-    created, challenges = start(client, {'item_name': 'iPhone 13', 'category': 'phone', 'tests': [FIND_MY]})
+    created, challenges = start(client, {'item_name': 'iPhone 13', 'category': 'phone', 'tests': [FIND_MY, 'power_on', 'imei']})
     view = client.get('/api/requests/' + created['token']).json()
-    assert view['tests'] == [{'id': 'find_my_off', 'label': 'Find My off'}]  # id slugged
+    assert view['tests'][0] == {'id': 'find_my_off', 'label': 'Find My off'}  # id slugged
     buyer = [c for c in challenges if c['kind'] == 'buyer']
-    assert [(c['prompt'], c['expect']) for c in buyer] == [(FIND_MY['prompt'], FIND_MY['expect'])]
+    assert [(c['prompt'], c['expect']) for c in buyer[:1]] == [(FIND_MY['prompt'], FIND_MY['expect'])]
     assert 'expect' not in json.dumps(view)  # the public view never leaks checker criteria
 
 
 def test_v3_ids_and_v4_objects_mix(client):
-    created, challenges = start(client, {'item_name': 'PS5', 'category': 'console', 'tests': ['power_on', FIND_MY]})
+    created, challenges = start(client, {'item_name': 'PS5', 'category': 'console', 'tests': ['power_on', FIND_MY, 'serial']})
     view = client.get('/api/requests/' + created['token']).json()
-    assert [t['id'] for t in view['tests']] == ['power_on', 'find_my_off']
-    assert sum(c['kind'] == 'buyer' for c in challenges) == 2
+    assert [t['id'] for t in view['tests']] == ['power_on', 'find_my_off', 'serial']
+    assert sum(c['kind'] == 'buyer' for c in challenges) == 3
 
 
 @pytest.mark.parametrize('tests', [

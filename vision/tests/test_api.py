@@ -26,7 +26,7 @@ HEAD = {'X-Agent-Key': 'test-key'}
 
 
 def create(client):
-    r = client.post('/api/requests', json={'item_name': 'Controller', 'category': 'console', 'tests': ['power_on']})
+    r = client.post('/api/requests', json={'item_name': 'Controller', 'category': 'console', 'tests': ['power_on', 'buttons', 'serial']})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -43,7 +43,7 @@ def test_lifecycle(client, frames):
     assert client.post('/api/agent/requests/watch', headers=HEAD, json={'code': d['code'], 'chat_id': 'private-chat'}).json() == {'ok': True}
     root = '/api/agent/requests/' + d['request_id']
     challenges = client.post(root + '/start', headers=HEAD).json()['challenges']
-    assert 1 <= sum(c['kind'] == 'liveness' for c in challenges) <= 2
+    assert len(challenges) == 3 and all(c['kind'] == 'buyer' for c in challenges)
     assert 'code' not in client.get(url).json()
     for c in challenges:
         r = client.post('/api/agent/check', headers=HEAD, json={'request_id': d['request_id'], 'challenge_id': c['id'], 'attempt': 1, 'frames': frames})
@@ -70,7 +70,7 @@ def test_abort_and_unfinished(client):
     client.post(root + '/start', headers=HEAD)
     done = client.post(root + '/finish', headers=HEAD).json()
     assert done['summary']['passed'] == 0
-    assert done['summary']['liveness'] == 'failed'
+    assert done['summary']['liveness'] == 'not_run'
     assert done['summary']['unverified'] == done['summary']['total']
 
 

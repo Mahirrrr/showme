@@ -21,7 +21,7 @@ const BG = {
 };
 const MARBLE = '#F4F1EA';
 const VERDICT = { passed: 'Passed', failed: 'Failed', unverified: 'Unclear' };
-const FOOTER = { waiting: 'SHOW IT TO THE CAMERA', checking: 'THE ORACLE LOOKS…' };
+const FOOTER = { waiting: 'SHOW IT TO THE CAMERA', checking: 'CHECKING…' };
 const SERIF = 'Baskerville, Georgia, serif';
 const DISPLAY = 'Didot, Baskerville, Georgia, serif';
 
@@ -79,7 +79,7 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
   const measure = t => g.measureText(t).width, maxW = P_W - 2 * M;
 
   g.globalAlpha = 0.8; g.font = `24px ${DISPLAY}`;
-  g.fillText(step && total ? `TRIAL ${roman(step)} · OF ${roman(total)}` : 'SHOWME · LIVE CHECK', M, 230);
+  g.fillText(step && total ? `CHECK ${step} OF ${total}` : 'SHOWME · LIVE CHECK', M, 230);
   if (title) { g.font = `italic 30px ${SERIF}`; g.fillText(wrapText(title, maxW, measure)[0] ?? '', M, 272); }
   g.globalAlpha = 1;
 

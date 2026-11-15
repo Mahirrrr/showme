@@ -12,13 +12,13 @@ export interface Banner {
 export function summarize(view: RequestView): Summary {
   if (view.summary) return view.summary
   const count = (r: CheckResult['result']) => view.results.filter((x) => x.result === r).length
-  const livenessFailed = view.results.some((x) => x.kind === 'liveness' && x.result === 'failed')
+  const liveness = view.results.filter((x) => x.kind === 'liveness')
   return {
     passed: count('passed'),
     failed: count('failed'),
     unverified: count('unverified'),
     total: view.results.length,
-    liveness: livenessFailed ? 'failed' : 'passed',
+    liveness: liveness.length === 0 ? 'not_run' : liveness.every(x => x.result === 'passed') ? 'passed' : 'failed',
   }
 }
 
@@ -44,8 +44,8 @@ export function bannerFor(view: RequestView): Banner {
   if (s.total > 0 && s.passed === s.total) {
     return {
       tone: 'pass',
-      title: 'Verified live',
-      detail: `All ${s.total} checks passed on a live call.`,
+      title: s.liveness === 'not_run' ? 'All checks passed' : 'Verified live',
+      detail: s.liveness === 'not_run' ? `All ${s.total} selected checks passed. No separate liveness test was run.` : `All ${s.total} checks passed on a live call.`,
     }
   }
   return {
