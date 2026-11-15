@@ -78,7 +78,7 @@ export interface RequestView {
   verified_at?: string | null
 }
 
-/** POST /api/requests body (v5: at least three selected tests) */
+/** POST /api/requests body (v5: 2 to 5 selected tests) */
 export interface CreateRequestBody {
   item_name: string
   category: Category

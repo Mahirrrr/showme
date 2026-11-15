@@ -44,7 +44,7 @@ class CreateRequest(Input):
     category: Literal['console', 'phone', 'laptop', 'other']
     listing_url: str | None = Field(default=None, max_length=2048)
     # v3: catalog IDs. v4: full test objects (e.g. from /api/tests/suggest). Both may be mixed.
-    tests: list[str | TestSpec] = Field(min_length=3, max_length=20)
+    tests: list[str | TestSpec] = Field(min_length=2, max_length=20)
     custom_test: str | None = Field(default=None, min_length=1, max_length=500)
 
     @field_validator('listing_url')

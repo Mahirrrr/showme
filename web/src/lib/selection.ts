@@ -1,7 +1,7 @@
 import type { TestSpec } from '../types'
 
-/** A check runs 3 to 5 buyer tests. The buyer's own test is one of them and counts like any other. */
-export const MIN_TESTS = 3
+/** A check runs 2 to 5 buyer tests. The buyer's own test is one of them and counts like any other. */
+export const MIN_TESTS = 2
 export const MAX_TESTS = 5
 
 export function canSubmitSelection(count: number): boolean {

@@ -13,12 +13,12 @@ after(() => server.close());
 const { createRequest, ApiError } = await server.ssrLoadModule('/src/api.ts');
 const specs = [0, 1, 2].map(i => ({ id: `test_${i}`, label: `Test ${i}`, prompt: `Show part ${i}.`, expect: `part ${i} visible` }));
 
-test('API client rejects fewer than three or duplicate selections without sending a request', async () => {
+test('API client rejects fewer than two or duplicate selections without sending a request', async () => {
   const original = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => { calls++; return Response.json({}); };
   try {
-    for (const tests of [[], specs.slice(0, 2), [specs[0], specs[0], specs[1]]]) {
+    for (const tests of [[], specs.slice(0, 1), [specs[0], specs[0], specs[1]]]) {
       await assert.rejects(createRequest({ item_name: 'Item', category: 'other', tests, custom_test: 'Show the cable.' }), e => e instanceof ApiError && e.status === 422);
     }
     assert.equal(calls, 0);

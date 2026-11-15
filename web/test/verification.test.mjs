@@ -3,18 +3,19 @@ import assert from 'node:assert/strict';
 import { canSubmitSelection, selectionMessage, selectionTone, ownTest, MAX_TESTS } from '../src/lib/selection.ts';
 import { bannerFor, summarize } from '../src/lib/report.ts';
 
-test('a check needs 3 to 5 tests', () => {
+test('a check needs 2 to 5 tests', () => {
   assert.equal(MAX_TESTS, 5);
-  for (const count of [0, 1, 2, 6, 20, 2.5]) assert.equal(canSubmitSelection(count), false);
-  for (const count of [3, 4, 5]) assert.equal(canSubmitSelection(count), true);
+  for (const count of [0, 1, 6, 20, 2.5]) assert.equal(canSubmitSelection(count), false);
+  for (const count of [2, 3, 4, 5]) assert.equal(canSubmitSelection(count), true);
 });
 test('the counter says what is missing and when the maximum is reached', () => {
-  assert.equal(selectionMessage(0), '0 of 5 selected · pick 3 more');
-  assert.equal(selectionMessage(2), '2 of 5 selected · pick 1 more');
+  assert.equal(selectionMessage(0), '0 of 5 selected · pick 2 more');
+  assert.equal(selectionMessage(1), '1 of 5 selected · pick 1 more');
+  assert.equal(selectionMessage(2), '2 of 5 selected · ready');
   assert.equal(selectionMessage(3), '3 of 5 selected · ready');
   assert.equal(selectionMessage(5), '5 of 5 selected · maximum reached');
   assert.equal(selectionMessage(6), '6 of 5 selected · untick 1');
-  assert.deepEqual([0, 2, 3, 4, 5, 6].map(selectionTone), ['need', 'need', 'ok', 'ok', 'full', 'need']);
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map(selectionTone), ['need', 'need', 'ok', 'ok', 'ok', 'full', 'need']);
 });
 test('your own test becomes a normal test that counts', () => {
   const t = ownTest('  Show the charger works with the phone  ', new Set());
