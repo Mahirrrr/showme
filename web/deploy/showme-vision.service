@@ -1,0 +1,21 @@
+# /etc/systemd/system/showme-vision.service
+# vision/ (FastAPI) on 127.0.0.1:8000; nginx proxies /api to it.
+# Secrets live in /etc/showme/vision.env (root-only, never in git).
+[Unit]
+Description=ShowMe vision API (uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=showme
+Group=showme
+WorkingDirectory=/srv/showme/app
+EnvironmentFile=/etc/showme/vision.env
+ExecStart=/srv/showme/venv/bin/uvicorn vision.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
