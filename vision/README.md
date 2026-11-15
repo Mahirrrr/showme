@@ -64,6 +64,8 @@ Set `VISION_URL=http://localhost:8000/api` and the same `AGENT_KEY`. Send `X-Age
 6. On a dropped call, `POST /api/agent/requests/{request_id}/abort`. Partial results and challenges are cleared; the original code works again until expiry. A new start generates new challenge IDs, and evaluations from the old call are rejected.
 7. For `WATCH`, `POST /api/agent/requests/watch` with `{code,chat_id}`. Duplicate registrations are deduplicated. The backend returns recipients at finish; Mahir's agent sends the messages.
 
+Mahir should use a **30-second HTTP request timeout** for `/api/agent/check`. This allows the 20-second Gemini deadline plus preprocessing, Atlas writes and network overhead. Replace the former six-second client timeout for this route; a client abort can otherwise occur before the backend persists the result. The HTTP timeout is separate from the agent's retry pacing and 4:30 call guard.
+
 `best_frame` is a **zero-based index** into the submitted frame order. Checks persist progress before awaiting Gemini. The public current prompt becomes available at start/check submission; Contract v3 has no separate endpoint for the instant the agent displays a new prompt. Result ticks appear as checks finish.
 
 Status failures: 401 invalid/missing key; 404 unknown request/challenge/waiting code; 409 invalid state/attempt/concurrent update; 413 oversized body; 422 invalid input/images; 503 unavailable database or exhausted code allocation. Provider errors/timeouts become persisted `unverified` verdicts, never mock passes. A database outage does not silently switch stores.
@@ -74,6 +76,7 @@ Configure locally, without committing secrets:
 
 - `MOCK=0`
 - `GEMINI_API_KEY`: a Gemini API project key with access to the configured model. Check quota and billing for the desired request rate.
+- `CHECK_TIMEOUT_SECONDS`: defaults to `20`. The value is passed to the Google SDK in milliseconds and used by FastAPI as the evaluation deadline. Gemini rejected the previous five-second SDK deadline because its minimum is ten seconds.
 - `GEMINI_MODEL`: defaults to `gemini-3.1-flash-lite`; choose a model available to your project and benchmark it. Synthetic image probes succeeded; real-item accuracy and production latency still require validation.
 - `MONGODB_URI`: Atlas SRV connection string for a database user authorized to read/write and create indexes in the configured database. URL-escape password characters. Add your development/deployment IP to Atlas Network Access and ensure DNS/TLS connectivity.
 - `MONGODB_DATABASE`: defaults to `showme`; collection is `requests`.
@@ -83,9 +86,26 @@ Configure locally, without committing secrets:
 
 Live mode fails startup if required credentials are missing or Atlas cannot connect. `/api/health` identifies the mode; it is a process check, not a continuous external-service readiness probe. Atlas writes are acknowledged before successful responses. Unique token/request-ID indexes and a partial unique active-code index prevent allocation races. Codes remain reserved during calls so abort restores the original code. Optimistic revisions prevent lost cross-worker updates. Expiry is enforced on reads/lookups/create/abort; there is no TTL deletion of completed reports.
 
-Only a selected JPEG thumbnail (at most 400 pixels wide) is persisted per evaluated challenge; retries replace that thumbnail. Source frames are held only during processing. Requests have a 12 MB body limit, 2 MB encoded-frame limit (approximately), 16-million-pixel decode limit, and 2–4-frame bound. Images are normalized to at most 640×640 at JPEG quality 70 before evaluation. Gemini uses schema-constrained output, a five-second default deadline, and no SDK retry expansion. The agent manages retries. Passes below 0.7 confidence are downgraded to `unverified`.
+Only a selected JPEG thumbnail (at most 400 pixels wide) is persisted per evaluated challenge; retries replace that thumbnail. Source frames are held only during processing. Requests have a 12 MB body limit, 2 MB encoded-frame limit (approximately), 16-million-pixel decode limit, and 2–4-frame bound. Images are normalized to at most 640×640 at JPEG quality 70 before evaluation. Gemini uses schema-constrained output, a twenty-second default deadline, and no SDK retry expansion. The agent manages retries. Passes below 0.7 confidence are downgraded to `unverified`.
 
-If Gate 1 supplies FaceTime-window frames, set `VISION_CROP_BOX=left,top,right,bottom` to the camera region in source-image pixels. Invalid crops reject the input rather than inspect the wrong region. This fixed crop must be tuned on real Gate 1 frames; no automatic region detection is claimed.
+Plan A FaceTime privacy filtering is enabled by default when loading environment settings. Calibration on two locally supplied agent-captured samples found **640×360** screenshots with centered portrait caller video at approximately x=200..440, not the earlier approximate 1280×720 layout. The local `.env`, `.env.example`, and sanitizer defaults now use:
+
+```dotenv
+VISION_FRAME_MODE=facetime
+VISION_FRAME_SIZE=640,360
+VISION_CROP_BOX=204,28,436,352
+VISION_MASK_BOXES=204,288,304,352
+```
+
+All boxes are `left,top,right,bottom` in **original source pixels**, with exclusive right/bottom edges. Multiple masks are separated by semicolons. The crop retains a 232×324 caller region, excludes the black side margins, removes the top overlay (including a safety buffer), and trims the bottom rounded edge. A single buffered 100×64 source-pixel mask removes the bottom-left self-view tile. The lower-right caller evidence stays visible: the previous full-width bottom mask has been removed. No FaceTime controls remain inside this crop in either calibration sample.
+
+Masks are applied before cropping and before any resize. No automatic scaling is applied: an unexpected frame size is unusable rather than risking a shifted UI. In particular, a future 1280×720 capture will be rejected until its layout is inspected and configured; it must not be assumed to match the previous approximation or a simple scale of this portrait layout.
+
+To tune, keep `VISION_FRAME_SIZE` aligned with Mahir's capture, set the crop to caller video, and use masks to cover every overlay left inside it, with a safety margin. Restart Uvicorn after dotenv changes. Custom settings replace defaults, so visually validate sanitized local previews after changing capture dimensions, window layout, or overlay positions. A fixed crop does not detect moving/new UI. The originals in `vision/local_samples/` are used only for local calibration and are ignored by Git; sanitized previews (`sanitized1.jpg`, `sanitized2.jpg`) and thumbnails (`thumb1.jpg`, `thumb2.jpg`) are also local and ignored. No original images were submitted to Gemini during calibration.
+
+Only sanitized, metadata-free JPEGs reach Gemini and the thumbnail generator. A batch containing an unexpected size, invalid crop/mask, or less than 10%/1,024 pixels of visible evidence is not sent to the checker: the attempt is persisted as `unverified` with an empty thumbnail. There is no fallback to an uncropped frame. Invalid JPEG/base64 payloads remain HTTP 422 input errors. Original frames are neither written nor logged. Black masking does not prove that the remaining item evidence is usable; Gemini still returns `unverified` when it cannot see the requirement.
+
+For **raw camera frames only**, explicitly use `VISION_FRAME_MODE=camera`, clear `VISION_CROP_BOX` and `VISION_MASK_BOXES`, and send no FaceTime UI. This opt-out is for webcam/raw-camera integration; it must not be used for window screenshots. Mock mode uses the same privacy processing as the real checker. The standalone labeled-image evaluator also applies these settings; use explicit camera mode for raw-item sample datasets.
 
 ## Validation and outstanding physical checks
 

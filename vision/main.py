@@ -24,7 +24,7 @@ from .catalog import CATALOG, build_challenges
 from .checker import GeminiChecker, MockChecker, unavailable
 from .config import ROOT, Settings
 from .store import Conflict, MemoryStore, MongoStore
-from .thumbs import prepare_frames, thumbnail
+from .thumbs import UnusableEvidence, prepare_frames, thumbnail
 
 
 def now():
@@ -248,25 +248,37 @@ def create_app(settings=None, store=None, checker=None):
             return previous['verdict']  # retry of a successfully persisted HTTP request
         if body.attempt != (previous['attempts'] + 1 if previous else 1) or (previous and previous['result'] == 'passed'):
             raise HTTPException(409, 'Attempts must be sequential, at most three, and stop after passing')
+        privacy_failure = None
+        frames = []
         try:
-            frames = await run_in_threadpool(prepare_frames, body.frames, settings.crop_box)
+            frames = await run_in_threadpool(prepare_frames, body.frames, settings.crop_box,
+                frame_mode=settings.frame_mode, frame_size=settings.frame_size, mask_boxes=settings.mask_boxes)
+        except UnusableEvidence as exc:
+            privacy_failure = str(exc)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
-        body.frames.clear()
+        finally:
+            body.frames.clear()
         doc['current_challenge'] = {'prompt': challenge['prompt'], 'attempt': body.attempt}
         # Persist BEFORE awaiting Gemini, so frontend polling sees progress.
         await run_in_threadpool(storage().save, doc)
         call_id = doc['call_id']
         try:
-            verdict = await asyncio.wait_for(app.state.checker.evaluate(challenge, frames), timeout=settings.check_timeout)
-        except Exception:
-            verdict = unavailable()
-        if verdict.result == 'passed' and verdict.confidence < 0.7:
-            verdict.result = 'unverified'
-        if verdict.best_frame >= len(frames):
-            verdict = unavailable('Vision returned an invalid frame selection.')
-        thumb = await run_in_threadpool(thumbnail, frames[verdict.best_frame])
-        frames.clear()
+            if privacy_failure:
+                verdict = unavailable(privacy_failure)
+                thumb = ''
+            else:
+                try:
+                    verdict = await asyncio.wait_for(app.state.checker.evaluate(challenge, frames), timeout=settings.check_timeout)
+                except Exception:
+                    verdict = unavailable()
+                if verdict.result == 'passed' and verdict.confidence < 0.7:
+                    verdict.result = 'unverified'
+                if verdict.best_frame >= len(frames):
+                    verdict = unavailable('Vision returned an invalid frame selection.')
+                thumb = await run_in_threadpool(thumbnail, frames[verdict.best_frame])
+        finally:
+            frames.clear()
         result = dict(challenge_id=challenge['id'], kind=challenge['kind'], prompt=challenge['prompt'],
                       result=verdict.result, confidence=verdict.confidence, reason=verdict.reason,
                       attempts=body.attempt, thumb=thumb, verdict=verdict.model_dump())

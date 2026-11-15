@@ -40,7 +40,7 @@ async def main():
     if not settings.mock or not settings.gemini_api_key:
         output({'error': 'Probe requires MOCK=1 and a configured Gemini key; no settings changed.'})
         return
-    # Give standalone probes 30 seconds; the backend's five-second budget is unchanged.
+    # Give standalone probes 30 seconds; the backend's configured budget is unchanged.
     probe_settings = replace(settings, check_timeout=30)
     checker = GeminiChecker(probe_settings)
     try:

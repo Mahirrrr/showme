@@ -28,7 +28,7 @@ async def evaluate(path):
         for i, sample in enumerate(manifest):
             if not 2 <= len(sample['frames']) <= 4:
                 raise ValueError('Each sample needs 2–4 chronological JPEG frames')
-            frames = prepare_frames([base64.b64encode((path.parent / p).read_bytes()).decode() for p in sample['frames']], settings.crop_box)
+            frames = prepare_frames([base64.b64encode((path.parent / p).read_bytes()).decode() for p in sample['frames']], settings.crop_box, frame_mode=settings.frame_mode, frame_size=settings.frame_size, mask_boxes=settings.mask_boxes)
             started = time.monotonic()
             result = await asyncio.wait_for(checker.evaluate_strict(sample, frames), settings.check_timeout)
             elapsed = time.monotonic() - started
