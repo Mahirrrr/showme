@@ -94,6 +94,11 @@ Read this after `showme/CLAUDE.md`. It says where the `agent/` work stands, what
    - "I ticked 3 but got 6": Wan's `web/src/api.ts` `createRequest` sends full test objects (contract v4); vision answers 422; the fallback then sends **every** catalog test for the category. Fix in Wan's folder: send only the ticked ids that exist in the catalog.
    - Grey screen at call start: the Chert line has `connecting_screen_dismissal: "audio"`. The docs say per-line presentation sets "handoff when audio or video is ready"; there is no public API for it, so change it in the Chert console (Lines) or ask Gary.
    - Open: on hang-up after at least one check, finish with partial results instead of aborting (needs Mahir's OK).
+1f. **About 9:50 PM: voice commands and noise handling.**
+   - The seller can say "skip", "again" or "ready" during a check (`[cmd]` lines in the log). Waiting cards list them.
+   - Hints are the big text while retrying; the voice runs at ElevenLabs speed 1.15 (`TTS_SPEED`).
+   - Caller audio goes through LiveKit Cloud background voice cancellation (`@livekit/noise-cancellation-node` 0.3.0) before speech-to-text, so other voices in the hall are removed. `NOISE_CANCEL=0` turns it off if it ever breaks a call. Not yet checked on a live call.
+   - Demo phone: turn on FaceTime Mic Mode → Voice Isolation (Control Center during a call).
 2. **Real Gemini judging:** get Youngjun's `MONGODB_URI` (by DM), set `MOCK=0` and `GEMINI_API_KEY` in `../showme-vision/vision/.env`, restart uvicorn, and run the agent with `MOCK_VISION=0`. Wrong answers must come back `failed` or `unverified`.
 3. **Merge 1 at 8 PM:** end to end in a plain LiveKit room. Webcam, agent, real `vision/`, and `/v/<token>` updating live. Then merge the branches into `main` (Mahir's job).
 4. **Devpost draft by 10:30 PM** (hard cutoff 11:59 PM Saturday).

@@ -9,6 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { AutoSubscribe, defineAgent, voice } from '@livekit/agents';
 import * as elevenlabs from '@livekit/agents-plugin-elevenlabs';
+import { BackgroundVoiceCancellation } from '@livekit/noise-cancellation-node';
 import * as google from '@livekit/agents-plugin-google';
 import * as openai from '@livekit/agents-plugin-openai';
 import { LocalVideoTrack, TrackSource, VideoBufferType, VideoFrame, VideoSource } from '@livekit/rtc-node';
@@ -111,7 +112,12 @@ const agent = defineAgent({
       room: ctx.room,
       agent: new voice.Agent({ instructions: 'You only speak scripted lines.' }),
       record: false,
-      inputOptions: { participantIdentity: caller.identity, audioEnabled: true, videoEnabled: false, textEnabled: false, closeOnDisconnect: true, deleteRoomOnClose: false },
+      inputOptions: {
+        participantIdentity: caller.identity, audioEnabled: true, videoEnabled: false, textEnabled: false, closeOnDisconnect: true, deleteRoomOnClose: false,
+        // Noisy expo hall: LiveKit Cloud's background voice cancellation keeps only the seller's voice (other
+        // people's speech and room noise are removed before speech-to-text). NOISE_CANCEL=0 turns it off.
+        ...(process.env.NOISE_CANCEL !== '0' && { noiseCancellation: BackgroundVoiceCancellation() }),
+      },
       outputOptions: { audioEnabled: true, transcriptionEnabled: false },
     });
 
