@@ -23,15 +23,20 @@ export function Page({ children }: { children: ReactNode }) {
 
 export function Logo() {
   return (
-    <span
-      aria-hidden
-      className="grid size-7 place-items-center rounded-lg bg-ink text-[13px] font-bold text-white"
-    >
-      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.4">
-        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    </span>
+    // Same mark as public/favicon.svg: a video-call camera with a check.
+    <svg aria-hidden viewBox="0 0 64 64" className="size-7 shrink-0">
+      <rect width="64" height="64" rx="15" fill="#14306e" />
+      <rect x="9" y="19" width="32" height="26" rx="7" fill="#fff" />
+      <path d="M41 28l13-8v24l-13-8z" fill="#c9a24e" />
+      <path
+        d="M17 32l5 5 10-11"
+        fill="none"
+        stroke="#14306e"
+        strokeWidth="4.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
