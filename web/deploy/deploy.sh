@@ -38,5 +38,5 @@ systemctl restart showme-vision
 nginx -t -q && systemctl enable --now nginx >/dev/null && systemctl reload nginx
 sleep 2
 systemctl is-active showme-vision
-curl -fsS http://127.0.0.1/api/health; echo'
-echo "==> done: http://${HOST#*@}/"
+curl -fsS http://127.0.0.1:8000/api/health; echo'
+echo "==> done: https://showme.photo/"
