@@ -1,10 +1,39 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCode } from '../code.mjs';
+import { parseCode, makeCodeListener } from '../code.mjs';
 import { renderCard, withPulse, wrapText, WIDTH, HEIGHT } from '../card.mjs';
 import { FrameBuffer, toJpegBase64 } from '../frames.mjs';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
 import { runCall, LIMITS } from '../flow.mjs';
+
+// ---------- code listener (sellers say the code while the greeting is still playing)
+test('makeCodeListener: a code heard before listening starts is kept', async () => {
+  let t = 1000;
+  const l = makeCodeListener({ now: () => t, keepMs: 20000 });
+  l.heard('4827');
+  t += 5000;
+  assert.equal(await l.listen(50), '4827');
+});
+test('makeCodeListener: an early code is used once, then it waits again', async () => {
+  let t = 0;
+  const l = makeCodeListener({ now: () => t });
+  l.heard('4827');
+  assert.equal(await l.listen(50), '4827');
+  assert.equal(await l.listen(20), null);
+});
+test('makeCodeListener: a stale early code is ignored', async () => {
+  let t = 0;
+  const l = makeCodeListener({ now: () => t, keepMs: 20000 });
+  l.heard('4827');
+  t += 30000;
+  assert.equal(await l.listen(20), null);
+});
+test('makeCodeListener: a code heard while listening resolves it', async () => {
+  const l = makeCodeListener({ now: () => 0 });
+  const p = l.listen(1000);
+  l.heard('1234');
+  assert.equal(await p, '1234');
+});
 
 // ---------- parseCode
 test('parseCode: digits, words, mixed, split', () => {

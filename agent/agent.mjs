@@ -14,7 +14,7 @@ import * as openai from '@livekit/agents-plugin-openai';
 import { LocalVideoTrack, TrackSource, VideoBufferType, VideoFrame, VideoSource } from '@livekit/rtc-node';
 import { FPS, HEIGHT, WIDTH, renderCard, withPulse } from './card.mjs';
 import { runAgent } from './chert-rooms.mjs';
-import { parseCode } from './code.mjs';
+import { makeCodeListener, parseCode } from './code.mjs';
 import { runCall } from './flow.mjs';
 import { FrameBuffer, attachCallerVideo, toJpegBase64 } from './frames.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
@@ -71,18 +71,14 @@ const agent = defineAgent({
           model: 'eleven_flash_v2_5',
         }),
       });
-    const codeWaiters = new Set();
+    const codes = makeCodeListener();
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, ev => {
       if (!ev.isFinal) return;
       console.log(`[stt] ${ev.transcript}`);
       const code = parseCode(ev.transcript);
-      if (code) for (const resolve of codeWaiters) resolve(code);
+      if (code) codes.heard(code);
     });
-    const listenForCode = ms => new Promise(resolve => {
-      const done = code => { clearTimeout(t); codeWaiters.delete(done); resolve(code); };
-      const t = setTimeout(() => done(null), ms);
-      codeWaiters.add(done);
-    });
+    const listenForCode = ms => codes.listen(ms);
 
     const vision = makeVision();
     let state = null;
@@ -109,7 +105,17 @@ const agent = defineAgent({
       say: text => { console.log(`[say] ${text}`); return session.say(text, { allowInterruptions: false }).waitForPlayout(); },
       show: c => { console.log(`[card] ${c.status ?? ''} ${c.prompt ?? ''}`); show(c); },
       listenForCode,
-      grabFrames: () => buffer.recent(2000, 4).map(f => toJpegBase64(f)),
+      grabFrames: () => {
+        const frames = buffer.recent(2000, 4).map(f => toJpegBase64(f));
+        // Debug record (logs/ is gitignored): the last frame of every check, to see what the camera saw.
+        if (process.env.SAVE_FRAMES === '1' && frames.length) {
+          const dir = fileURLToPath(new URL('./logs/frames/', import.meta.url));
+          void mkdir(dir, { recursive: true })
+            .then(() => writeFile(`${dir}${Date.now()}.jpg`, Buffer.from(frames.at(-1), 'base64')))
+            .catch(e => console.error('[frames] save failed', e.message));
+        }
+        return frames;
+      },
       vision,
       sleep: ms => new Promise(r => setTimeout(r, ms)),
       now: () => Date.now(),
