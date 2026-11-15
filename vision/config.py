@@ -32,7 +32,7 @@ class Settings:
     frame_mode: str = 'camera'
     frame_size: tuple = (640, 360)
     mask_boxes: tuple | None = None
-    passing_threshold_percent: float = 75.0
+    passing_threshold_percent: float = 60.0
 
     def __post_init__(self):
         if not math.isfinite(self.passing_threshold_percent) or not 0 < self.passing_threshold_percent <= 100:
@@ -54,6 +54,6 @@ class Settings:
                    crop_box=coordinates(box) if box else None,
                    mock_result=os.getenv('MOCK_RESULT', 'passed'),
                    frame_mode=os.getenv('VISION_FRAME_MODE', 'camera'),
-                   passing_threshold_percent=float(os.getenv('PASSING_THRESHOLD_PERCENT', '75')),
+                   passing_threshold_percent=float(os.getenv('PASSING_THRESHOLD_PERCENT', '60')),
                    frame_size=coordinates(size),
                    mask_boxes=tuple(coordinates(b) for b in masks.split(';')) if masks else None)

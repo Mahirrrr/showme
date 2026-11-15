@@ -1,12 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canSubmitSelection, selectionMessage } from '../src/lib/selection.ts';
+import { canSubmitSelection, selectionMessage, selectionTone, ownTest, MAX_TESTS } from '../src/lib/selection.ts';
 import { bannerFor, summarize } from '../src/lib/report.ts';
 
-test('minimum selection applies equally to suggested and standard tests', () => {
-  for (const count of [0, 1, 2, 21]) assert.equal(canSubmitSelection(count), false);
-  for (const count of [3, 6, 20]) assert.equal(canSubmitSelection(count), true);
-  assert.equal(selectionMessage(2), '2 selected · 3 tests minimum');
+test('a check needs 3 to 5 tests', () => {
+  assert.equal(MAX_TESTS, 5);
+  for (const count of [0, 1, 2, 6, 20, 2.5]) assert.equal(canSubmitSelection(count), false);
+  for (const count of [3, 4, 5]) assert.equal(canSubmitSelection(count), true);
+});
+test('the counter says what is missing and when the maximum is reached', () => {
+  assert.equal(selectionMessage(0), '0 of 5 selected · pick 3 more');
+  assert.equal(selectionMessage(2), '2 of 5 selected · pick 1 more');
+  assert.equal(selectionMessage(3), '3 of 5 selected · ready');
+  assert.equal(selectionMessage(5), '5 of 5 selected · maximum reached');
+  assert.equal(selectionMessage(6), '6 of 5 selected · untick 1');
+  assert.deepEqual([0, 2, 3, 4, 5, 6].map(selectionTone), ['need', 'need', 'ok', 'ok', 'full', 'need']);
+});
+test('your own test becomes a normal test that counts', () => {
+  const t = ownTest('  Show the charger works with the phone  ', new Set());
+  assert.equal(t.id, 'own_show_the_charger_works');
+  assert.equal(t.prompt, 'Show the charger works with the phone');
+  assert.ok(t.label.length <= 40 && t.label.startsWith('Show the charger'));
+  assert.ok(t.expect.length <= 200 && t.expect.includes('charger works'));
+  assert.equal(ownTest('Show it', new Set(['own_show_it'])).id, 'own_show_it_2');
+  assert.equal(ownTest('   ', new Set()), null);
+  assert.equal(ownTest('!!!', new Set()).id, 'own_test');
+  const long = ownTest('x'.repeat(300), new Set());
+  assert.ok(long.prompt.length <= 200 && long.label.length <= 40 && long.id.length <= 32);
+  assert.equal(ownTest('Zeige das Ladegerät', new Set()).label, 'Zeige das Ladegerät');
 });
 const passed = { prompt: 'Show it on.', kind: 'buyer', result: 'passed', attempts: 2, confidence: .9, reason: 'Visible.', attempt_history: [
   { attempt: 1, result: 'failed', confidence: .9, reason: 'Off.' },

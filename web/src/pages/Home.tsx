@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { buttonPrimary, Page } from '../components/ui'
 
+const NUMERALS = ['I', 'II', 'III']
+
 const STEPS = [
   { title: 'Pick the tests', body: 'Power on, every button, the serial label: whatever you need to see.' },
   { title: 'Send the link', body: 'The seller opens it and FaceTimes ShowMe. No app, no account.' },
@@ -30,8 +32,8 @@ export default function Home() {
       <ol className="space-y-3">
         {STEPS.map((s, i) => (
           <li key={s.title} className="flex gap-4 rounded-2xl border border-line bg-card p-5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-sm font-semibold text-white">
-              {i + 1}
+            <span className="w-8 shrink-0 pt-0.5 text-center font-display text-xl text-gold-ink">
+              {NUMERALS[i]}
             </span>
             <div>
               <h2 className="font-semibold">{s.title}</h2>

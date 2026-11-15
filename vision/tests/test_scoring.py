@@ -67,7 +67,7 @@ def test_api_retry_score_snapshot_and_legacy_read_compatibility(frames):
         summary = finish['summary']
         assert summary['overall_verdict'] == 'passed' and summary['pass_percentage'] == 75
         assert summary['passed_tests'] == 3 and summary['total_selected_tests'] == 4
-        assert summary['passing_threshold_percent'] == 75
+        assert summary['passing_threshold_percent'] == 60
         view = c.get('/api/requests/' + created['token']).json()
         assert view['summary'] == summary
         assert view['results'][0]['result'] == 'passed'
@@ -89,7 +89,8 @@ def test_api_retry_score_snapshot_and_legacy_read_compatibility(frames):
 def test_threshold_configuration(monkeypatch):
     monkeypatch.setattr('vision.config.load_dotenv',lambda *a,**kw:None)
     monkeypatch.delenv('PASSING_THRESHOLD_PERCENT',raising=False)
-    assert Settings.from_env().passing_threshold_percent == 75
+    assert Settings.from_env().passing_threshold_percent == 60
+    assert scored_summary(document(['passed', 'passed', 'failed']), 60)['overall_verdict'] == 'passed'  # 2 of 3 meets 60%
     monkeypatch.setenv('PASSING_THRESHOLD_PERCENT','80')
     assert Settings.from_env().passing_threshold_percent == 80
     assert scored_summary(document(['passed'] * 3 + ['failed']),80)['overall_verdict'] == 'failed'

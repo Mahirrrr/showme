@@ -1,6 +1,6 @@
-import { canSubmitSelection, selectionMessage } from '../lib/selection'
+import { canSubmitSelection, MAX_TESTS, MIN_TESTS, ownTest, selectionMessage, selectionTone } from '../lib/selection'
 import { QRCodeSVG } from 'qrcode.react'
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { createRequest, suggestTests, type CreateResult } from '../api'
 import { guessCategory } from '../lib/catalog'
@@ -8,8 +8,8 @@ import { CATEGORY_LABEL } from '../lib/format'
 import type { SuggestResponse } from '../types'
 import { buttonPrimary, buttonSecondary, Card, Page } from '../components/ui'
 
-const input =
-  'mt-1.5 block h-12 w-full rounded-xl border border-line bg-card px-4 outline-none transition-colors focus:border-ink'
+const field = 'block h-12 w-full rounded-xl border border-line bg-card px-4 outline-none transition-colors focus:border-ink'
+const input = `mt-1.5 ${field}`
 
 export default function NewCheck() {
   const [itemName, setItemName] = useState('')
@@ -41,7 +41,7 @@ export default function NewCheck() {
     if (call !== latest.current) return
     setSuggestion(res)
     setSuggestedFor(name)
-    setSelected(new Set(res.tests.map((t) => t.id)))
+    setSelected(new Set(res.tests.slice(0, MIN_TESTS).map((t) => t.id))) // the buyer ticks up to 5
     setRejected([])
     setFresh(new Set())
     setNotice(null)
@@ -84,24 +84,51 @@ export default function NewCheck() {
     setSuggestion({ ...suggestion, tests, source: res.source === 'catalog' ? 'catalog' : suggestion.source })
     setRejected(exclude)
     setFresh(new Set(added))
-    setSelected((prev) => new Set([...prev, ...added]))
+    const room = Math.max(0, MAX_TESTS - selected.size)
+    setSelected((prev) => new Set([...prev, ...added.slice(0, room)]))
     if (added.length === 0) setNotice('No new tests left to suggest. Add your own below.')
     else if (added.length < unchecked.length) setNotice(`Only ${added.length} new test${added.length === 1 ? '' : 's'} found.`)
     else if (res.source === 'catalog') setNotice("Couldn't reach AI, so these come from the standard list.")
     setSwapping(false)
   }
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    if (!selected.has(id) && selected.size >= MAX_TESTS) {
+      setNotice(`${MAX_TESTS} tests max. Untick one to pick this.`)
+      return
+    }
+    setNotice(null)
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
+  }
 
+  // The buyer's own test joins the list at the top as a normal test, so it counts.
   const custom = customTest.trim()
-  const canCreate =
-    suggestion !== null && !stale && !suggesting && !swapping && !busy && canSubmitSelection(selected.size)
+  const addOwn = () => {
+    if (!suggestion) return
+    const spec = ownTest(customTest, new Set(suggestion.tests.map((t) => t.id)))
+    if (!spec) return
+    const room = selected.size < MAX_TESTS
+    setSuggestion({ ...suggestion, tests: [spec, ...suggestion.tests] })
+    if (room) setSelected((prev) => new Set([...prev, spec.id]))
+    setFresh(new Set([spec.id]))
+    setNotice(room ? null : `Added, but ${MAX_TESTS} tests is the max. Untick one to include yours.`)
+    setCustomTest('')
+  }
+  const onOwnKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault() // Enter adds the test; it never submits the form
+    addOwn()
+  }
+
+  // Text still in the box counts too: it is added when the link is created.
+  const count = selected.size + (custom ? 1 : 0)
+  const tone = selectionTone(count)
+  const canCreate = suggestion !== null && !stale && !suggesting && !swapping && !busy && canSubmitSelection(count)
 
   const create = async (e: FormEvent) => {
     e.preventDefault()
@@ -109,11 +136,11 @@ export default function NewCheck() {
     setBusy(true)
     setError(null)
     try {
+      const pending = ownTest(customTest, new Set(suggestion.tests.map((t) => t.id)))
       const res = await createRequest({
         item_name: name,
         category: suggestion.category,
-        tests: suggestion.tests.filter((t) => selected.has(t.id)),
-        ...(custom && { custom_test: custom }),
+        tests: [...(pending ? [pending] : []), ...suggestion.tests.filter((t) => selected.has(t.id))],
         ...(listingUrl.trim() && { listing_url: listingUrl.trim() }),
       })
       setCreated(res)
@@ -179,6 +206,7 @@ export default function NewCheck() {
                     : 'Suggest again'}
               </button>
             </div>
+            <Counter count={count} tone={tone} className="mt-3" />
             <ul className="mt-2 divide-y divide-line overflow-hidden rounded-xl border border-line bg-card">
               {suggestion.tests.map((t, i) => (
                 <li
@@ -196,13 +224,19 @@ export default function NewCheck() {
                     <span className="min-w-0">
                       <span className="flex items-center gap-2 font-medium wrap-break-word">
                         {t.label}
-                        {fresh.has(t.id) && (
+                        {t.id.startsWith('own_') ? (
+                          <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold-ink">
+                            Yours
+                          </span>
+                        ) : fresh.has(t.id) && (
                           <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
                             New
                           </span>
                         )}
                       </span>
-                      <span className="block text-sm text-muted wrap-break-word">{t.prompt}</span>
+                      {t.prompt !== t.label && (
+                        <span className="block text-sm text-muted wrap-break-word">{t.prompt}</span>
+                      )}
                     </span>
                   </label>
                 </li>
@@ -221,20 +255,34 @@ export default function NewCheck() {
             </p>
           </fieldset>
 
-          <label className="block">
-            <span className="text-sm font-medium">
-              Your own test <span className="font-normal text-faint">(optional)</span>
-            </span>
-            <input
-              className={input}
-              value={customTest}
-              onChange={(e) => setCustomTest(e.target.value)}
-              placeholder="Type a test of your own"
-              maxLength={140}
-              autoComplete="off"
-              disabled={stale}
-            />
-          </label>
+          <div>
+            <label htmlFor="own-test" className="text-sm font-medium">
+              Your own test <span className="font-normal text-faint">(optional, counts as one of the {MAX_TESTS})</span>
+            </label>
+            <div className="mt-1.5 flex gap-2">
+              <input
+                id="own-test"
+                className={field}
+                value={customTest}
+                onChange={(e) => setCustomTest(e.target.value)}
+                onKeyDown={onOwnKey}
+                placeholder="Show the charger working"
+                maxLength={140}
+                autoComplete="off"
+                enterKeyHint="done"
+                disabled={stale}
+              />
+              <button
+                type="button"
+                onClick={addOwn}
+                disabled={!custom || stale}
+                className="h-12 shrink-0 rounded-xl border border-line bg-card px-4 font-semibold text-ink active:scale-[0.97] disabled:text-faint"
+              >
+                Add
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-faint">Press Enter or Add to put it at the top of the list.</p>
+          </div>
 
           <label className="block">
             <span className="text-sm font-medium">
@@ -258,13 +306,33 @@ export default function NewCheck() {
             </p>
           )}
 
-          <p role="status" aria-live="polite" className="text-sm text-muted">{selectionMessage(selected.size)}</p>
+          <Counter count={count} tone={tone} live />
           <button type="submit" className={buttonPrimary} disabled={!canCreate}>
             {busy ? 'Creating…' : 'Create the check link'}
           </button>
         </form>
       )}
     </Page>
+  )
+}
+
+const COUNTER_STYLE = {
+  need: 'border-fail/30 bg-fail-soft text-fail',
+  ok: 'border-pass/30 bg-pass-soft text-pass',
+  full: 'border-pass/30 bg-pass-soft text-pass',
+} as const
+
+function Counter({ count, tone, live = false, className = '' }: {
+  count: number; tone: keyof typeof COUNTER_STYLE; live?: boolean; className?: string
+}) {
+  return (
+    <p
+      {...(live && { role: 'status', 'aria-live': 'polite' as const })}
+      className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-base font-semibold ${COUNTER_STYLE[tone]} ${className}`}
+    >
+      <span aria-hidden className="text-lg leading-none">{tone === 'need' ? '!' : '✓'}</span>
+      {selectionMessage(count)}
+    </p>
   )
 }
 

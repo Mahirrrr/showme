@@ -33,7 +33,7 @@ export function makeMockVision({ results = {} } = {}) {
       const total = MOCK_CHALLENGES.length;
       return { summary: { ...counts, total, liveness: 'not_run', passed_tests: counts.passed,
         total_selected_tests: total, pass_percentage: counts.passed * 100 / total,
-        passing_threshold_percent: 75, overall_verdict: counts.passed * 100 >= 75 * total ? 'passed' : 'failed' },
+        passing_threshold_percent: 60, overall_verdict: counts.passed * 100 >= 60 * total ? 'passed' : 'failed' },
         link_url: 'http://localhost:5173/v/k3v9xq', notify_chat_ids: [] };
     },
     async abort(id) { rec('abort', id); return { ok: true }; },
