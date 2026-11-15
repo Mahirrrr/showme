@@ -133,7 +133,11 @@ function Awaiting({ view }: { view: RequestView }) {
 // ---------- in_call ----------
 
 function InCall({ view }: { view: RequestView }) {
-  const ch = view.current_challenge
+  // vision/ keeps current_challenge on the last submitted check until the next
+  // one starts, so hide it once that same check (same attempt) already has a result.
+  const cur = view.current_challenge
+  const done = cur && view.results.some((r) => r.prompt === cur.prompt && r.attempts >= cur.attempt)
+  const ch = done ? null : cur
   return (
     <>
       <ItemHeader
