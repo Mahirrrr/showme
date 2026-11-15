@@ -64,6 +64,8 @@ Set `VISION_URL=http://localhost:8000/api` and the same `AGENT_KEY`. Send `X-Age
 6. On a dropped call, `POST /api/agent/requests/{request_id}/abort`. Partial results and challenges are cleared; the original code works again until expiry. A new start generates new challenge IDs, and evaluations from the old call are rejected.
 7. For `WATCH`, `POST /api/agent/requests/watch` with `{code,chat_id}`. Duplicate registrations are deduplicated. The backend returns recipients at finish; Mahir's agent sends the messages.
 
+Mahir should use a **30-second HTTP request timeout** for `/api/agent/check`. This allows the 20-second Gemini deadline plus preprocessing, Atlas writes and network overhead. Replace the former six-second client timeout for this route; a client abort can otherwise occur before the backend persists the result. The HTTP timeout is separate from the agent's retry pacing and 4:30 call guard.
+
 `best_frame` is a **zero-based index** into the submitted frame order. Checks persist progress before awaiting Gemini. The public current prompt becomes available at start/check submission; Contract v3 has no separate endpoint for the instant the agent displays a new prompt. Result ticks appear as checks finish.
 
 Status failures: 401 invalid/missing key; 404 unknown request/challenge/waiting code; 409 invalid state/attempt/concurrent update; 413 oversized body; 422 invalid input/images; 503 unavailable database or exhausted code allocation. Provider errors/timeouts become persisted `unverified` verdicts, never mock passes. A database outage does not silently switch stores.
@@ -74,6 +76,7 @@ Configure locally, without committing secrets:
 
 - `MOCK=0`
 - `GEMINI_API_KEY`: a Gemini API project key with access to the configured model. Check quota and billing for the desired request rate.
+- `CHECK_TIMEOUT_SECONDS`: defaults to `20`. The value is passed to the Google SDK in milliseconds and used by FastAPI as the evaluation deadline. Gemini rejected the previous five-second SDK deadline because its minimum is ten seconds.
 - `GEMINI_MODEL`: defaults to `gemini-3.1-flash-lite`; choose a model available to your project and benchmark it. Synthetic image probes succeeded; real-item accuracy and production latency still require validation.
 - `MONGODB_URI`: Atlas SRV connection string for a database user authorized to read/write and create indexes in the configured database. URL-escape password characters. Add your development/deployment IP to Atlas Network Access and ensure DNS/TLS connectivity.
 - `MONGODB_DATABASE`: defaults to `showme`; collection is `requests`.
@@ -83,7 +86,7 @@ Configure locally, without committing secrets:
 
 Live mode fails startup if required credentials are missing or Atlas cannot connect. `/api/health` identifies the mode; it is a process check, not a continuous external-service readiness probe. Atlas writes are acknowledged before successful responses. Unique token/request-ID indexes and a partial unique active-code index prevent allocation races. Codes remain reserved during calls so abort restores the original code. Optimistic revisions prevent lost cross-worker updates. Expiry is enforced on reads/lookups/create/abort; there is no TTL deletion of completed reports.
 
-Only a selected JPEG thumbnail (at most 400 pixels wide) is persisted per evaluated challenge; retries replace that thumbnail. Source frames are held only during processing. Requests have a 12 MB body limit, 2 MB encoded-frame limit (approximately), 16-million-pixel decode limit, and 2–4-frame bound. Images are normalized to at most 640×640 at JPEG quality 70 before evaluation. Gemini uses schema-constrained output, a five-second default deadline, and no SDK retry expansion. The agent manages retries. Passes below 0.7 confidence are downgraded to `unverified`.
+Only a selected JPEG thumbnail (at most 400 pixels wide) is persisted per evaluated challenge; retries replace that thumbnail. Source frames are held only during processing. Requests have a 12 MB body limit, 2 MB encoded-frame limit (approximately), 16-million-pixel decode limit, and 2–4-frame bound. Images are normalized to at most 640×640 at JPEG quality 70 before evaluation. Gemini uses schema-constrained output, a twenty-second default deadline, and no SDK retry expansion. The agent manages retries. Passes below 0.7 confidence are downgraded to `unverified`.
 
 Plan A FaceTime privacy filtering is enabled by default when loading environment settings. Calibration on two locally supplied agent-captured samples found **640×360** screenshots with centered portrait caller video at approximately x=200..440, not the earlier approximate 1280×720 layout. The local `.env`, `.env.example`, and sanitizer defaults now use:
 

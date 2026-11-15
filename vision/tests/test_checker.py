@@ -83,3 +83,42 @@ def test_failed_liveness_overrides_buyer_pass(frames):
         result = client.post(root + '/finish', headers=HEAD).json()['summary']
         assert result['passed'] == 1
         assert result['liveness'] == 'failed'
+
+
+def test_timeout_defaults_and_environment_override(monkeypatch):
+    monkeypatch.setattr('vision.config.load_dotenv', lambda *args, **kwargs: None)
+    monkeypatch.delenv('CHECK_TIMEOUT_SECONDS', raising=False)
+    assert Settings().check_timeout == 20
+    assert Settings.from_env().check_timeout == 20
+    monkeypatch.setenv('CHECK_TIMEOUT_SECONDS', '30')
+    assert Settings.from_env().check_timeout == 30
+
+
+@pytest.mark.parametrize('seconds', [20, 30])
+def test_sdk_receives_timeout_in_milliseconds(monkeypatch, seconds):
+    from unittest.mock import Mock
+    constructor = Mock()
+    monkeypatch.setattr('vision.checker.genai.Client', constructor)
+    GeminiChecker(Settings(gemini_api_key='test-only-placeholder', check_timeout=seconds))
+    options = constructor.call_args.kwargs['http_options']
+    assert options.timeout == seconds * 1000
+    assert options.retry_options.attempts == 1
+
+
+def test_fastapi_uses_configured_checker_deadline(monkeypatch, frames):
+    import vision.main as main
+    original = asyncio.wait_for
+    deadlines = []
+
+    async def recorded_wait_for(awaitable, timeout):
+        deadlines.append(timeout)
+        return await original(awaitable, timeout)
+
+    monkeypatch.setattr(main.asyncio, 'wait_for', recorded_wait_for)
+    with TestClient(create_app(Settings(mock=True, agent_key='test-key'))) as client:
+        d = create(client)
+        challenge = client.post('/api/agent/requests/' + d['request_id'] + '/start', headers=HEAD).json()['challenges'][0]
+        response = client.post('/api/agent/check', headers=HEAD, json=dict(request_id=d['request_id'], challenge_id=challenge['id'], attempt=1, frames=frames))
+        assert response.status_code == 200
+        assert response.json()['result'] == 'passed'
+    assert 20 in deadlines

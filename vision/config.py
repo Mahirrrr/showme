@@ -25,7 +25,7 @@ class Settings:
     public_base_url: str = 'http://localhost:5173'
     line_number: str = ''
     gemini_model: str = 'gemini-3.1-flash-lite'
-    check_timeout: float = 5.0
+    check_timeout: float = 20.0
     crop_box: tuple | None = None
     mock_result: str = 'passed'
     frame_mode: str = 'camera'
@@ -44,7 +44,7 @@ class Settings:
                    mongodb_database=os.getenv('MONGODB_DATABASE', 'showme'),
                    public_base_url=os.getenv('PUBLIC_BASE_URL', 'http://localhost:5173').rstrip('/'),
                    line_number=os.getenv('LINE_NUMBER', ''), gemini_model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
-                   check_timeout=float(os.getenv('CHECK_TIMEOUT_SECONDS', '5')),
+                   check_timeout=float(os.getenv('CHECK_TIMEOUT_SECONDS', '20')),
                    crop_box=coordinates(box) if box else None,
                    mock_result=os.getenv('MOCK_RESULT', 'passed'),
                    frame_mode=os.getenv('VISION_FRAME_MODE', 'facetime'),
