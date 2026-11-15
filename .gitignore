@@ -10,3 +10,16 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 *.log
+
+# Team-internal notes and AI-tool files: kept locally, not in the public repo
+.claude/
+CLAUDE.md
+agent/AGENTS.md
+agent/CHERT_STARTER.md
+docs/WAN.md
+docs/YOUNGJUN.md
+docs/HANDOFF_MAHIR.md
+docs/SHOWME_PLAN.md
+docs/CHERT_DOCS_DIGEST.md
+docs/DEVPOST.md
+web/public/logo-ideas/

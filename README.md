@@ -18,7 +18,7 @@ web/      Wan       React + Vite: /, /new, /v/:token
 vision/   Youngjun  FastAPI + Gemini + MongoDB Atlas, all routes under /api
 agent/    Mahir     Node: Chert FaceTime agent on LiveKit
 shared/   contract.md, tests.json, mock_request.json, test_frames/
-docs/     SHOWME_PLAN.md, ARCHITECTURE.md, CHERT_DOCS_DIGEST.md, WAN.md, YOUNGJUN.md
+docs/     ARCHITECTURE.md, gallery/ (Devpost images)
 ```
 
 ## Setup
