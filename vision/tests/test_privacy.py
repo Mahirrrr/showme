@@ -172,3 +172,74 @@ def test_local_calibration_samples_when_available():
         thumb = Image.open(BytesIO(base64.b64decode(thumbnail(raw).split(',')[1])))
         assert thumb.width <= 400
         assert max(thumb.convert('RGB').getpixel((30, 300))) < 20
+
+
+def test_camera_mode_is_environment_default(monkeypatch):
+    monkeypatch.setattr('vision.config.load_dotenv', lambda *args, **kwargs: None)
+    for name in ('VISION_FRAME_MODE', 'VISION_CROP_BOX', 'VISION_MASK_BOXES'):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings.from_env()
+    assert settings.frame_mode == 'camera'
+    assert settings.crop_box is None
+    assert settings.mask_boxes is None
+
+
+def agent_cropped_frame():
+    image = Image.new('RGB', (480, 520), 'white')
+    draw = ImageDraw.Draw(image)
+    # Colored borders are useful caller evidence; no part should be cut or masked.
+    draw.rectangle((0, 0, 479, 24), fill='red')
+    draw.rectangle((0, 495, 479, 519), fill='blue')
+    draw.rectangle((0, 25, 24, 494), fill='green')
+    draw.rectangle((455, 25, 479, 494), fill='yellow')
+    metadata = Image.Exif()
+    metadata[270] = 'PRIVATE EXIF'
+    output = BytesIO()
+    image.save(output, 'JPEG', quality=95, exif=metadata)
+    return base64.b64encode(output.getvalue()).decode()
+
+
+def assert_camera_evidence_preserved(raw, size):
+    image = Image.open(BytesIO(raw)).convert('RGB')
+    assert image.size == size
+    assert image.getpixel((size[0] // 2, 5))[0] > 180
+    assert image.getpixel((size[0] // 2, size[1] - 6))[2] > 180
+    assert image.getpixel((5, size[1] // 2))[1] > 90
+    right = image.getpixel((size[0] - 6, size[1] // 2))
+    assert right[0] > 180 and right[1] > 180
+
+
+def test_camera_mode_keeps_agent_crop_and_strips_metadata():
+    from vision.thumbs import thumbnail
+    prepared = prepare_frames([agent_cropped_frame()] * 4)
+    for raw in prepared:
+        assert_camera_evidence_preserved(raw, (480, 520))
+        assert not Image.open(BytesIO(raw)).getexif()
+        assert b'PRIVATE EXIF' not in raw
+        thumb = base64.b64decode(thumbnail(raw).split(',')[1])
+        assert_camera_evidence_preserved(thumb, (369, 400))
+        assert Image.open(BytesIO(thumb)).width <= 400
+
+
+def test_camera_mode_api_keeps_full_agent_crop_for_checker_and_report():
+    class CameraChecker(RecordingChecker):
+        async def evaluate(self, challenge, frames):
+            for frame in frames:
+                assert_camera_evidence_preserved(frame, (480, 520))
+                assert not Image.open(BytesIO(frame)).getexif()
+            self.calls.append(list(frames))
+            return Verdict(result='passed', confidence=.95, reason='Synthetic camera-mode check.', best_frame=0)
+
+    checker = CameraChecker()
+    with TestClient(create_app(Settings(mock=True, agent_key='test-key'), checker=checker)) as client:
+        d = create(client)
+        root = '/api/agent/requests/' + d['request_id']
+        challenge = client.post(root + '/start', headers=HEAD).json()['challenges'][0]
+        result = client.post('/api/agent/check', headers=HEAD, json=dict(request_id=d['request_id'], challenge_id=challenge['id'], attempt=1, frames=[agent_cropped_frame()] * 2))
+        assert result.status_code == 200 and result.json()['result'] == 'passed'
+        assert len(checker.calls) == 1
+        report = client.get('/api/requests/' + d['token']).json()
+        thumb = base64.b64decode(report['results'][0]['thumb_url'].split(',')[1])
+        assert_camera_evidence_preserved(thumb, (369, 400))
+        stored = client.app.state.store.get(d['request_id'])
+        assert 'frames' not in stored and all('frames' not in row for row in stored['results'])

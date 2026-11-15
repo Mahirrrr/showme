@@ -47,6 +47,6 @@ class Settings:
                    check_timeout=float(os.getenv('CHECK_TIMEOUT_SECONDS', '20')),
                    crop_box=coordinates(box) if box else None,
                    mock_result=os.getenv('MOCK_RESULT', 'passed'),
-                   frame_mode=os.getenv('VISION_FRAME_MODE', 'facetime'),
+                   frame_mode=os.getenv('VISION_FRAME_MODE', 'camera'),
                    frame_size=coordinates(size),
                    mask_boxes=tuple(coordinates(b) for b in masks.split(';')) if masks else None)
