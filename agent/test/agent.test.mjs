@@ -6,6 +6,7 @@ import { FrameBuffer, toJpegBase64, findCallerStrip, cropToCallerVideo, makeCall
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
 import { callIdFromIdentity, makeCallEnder } from '../hangup.mjs';
+import { shotPlan } from '../flow.mjs';
 import { runCall, LIMITS, orderChallenges, hintFor, completionFor } from '../flow.mjs';
 import catalog from '../../shared/tests.json' with { type: 'json' };
 
@@ -554,4 +555,52 @@ test('makeCallEnder: an already-ended call is fine, errors never throw, no key m
   assert.equal(await makeCallEnder({ apiKey: '', projectId: 'p', fetchImpl: async () => { called = true; } })('c1'), 'skipped');
   assert.equal(await makeCallEnder({ apiKey: 'k', projectId: 'p' })(null), 'skipped');
   assert.equal(called, false);
+});
+
+// ---------- guided shots: rotate / pan / front-and-back tasks get one steady shot per side
+test('shotPlan: motion tasks become a list of shots, still tasks stay one look', () => {
+  assert.deepEqual(shotPlan('Slowly pan the camera over the front and back fabric.'), ['Front', 'Back']);
+  assert.deepEqual(shotPlan('Rotate it slowly so we see every side'), ['Front', 'Right side', 'Back', 'Left side']);
+  assert.deepEqual(shotPlan('Show all four sides of the console'), ['Front', 'Right side', 'Back', 'Left side']);
+  assert.deepEqual(shotPlan('Turn it around'), ['Front', 'Right side', 'Back', 'Left side']);
+  assert.deepEqual(shotPlan('Pan across the screen from left to right'), ['Start', 'Middle', 'End']);
+  assert.deepEqual(shotPlan('Show the top and bottom'), ['Top', 'Bottom']);
+  assert.equal(shotPlan('Show the serial label up close.'), null);
+  assert.equal(shotPlan('Turn it on and show the lock screen'), null); // "turn it on" is not a rotation
+  assert.equal(shotPlan('Turn it upside down'), null);
+});
+function guided(prompt, opts = {}) {
+  let n = 0;
+  const h = harness({ frames: () => [`f${n++}`, `f${n++}`], ...opts });
+  const start = h.deps.vision.start;
+  h.deps.vision.start = async id => { const r = await start(id); return { challenges: [{ ...r.challenges[0], prompt }] }; };
+  const sent = [];
+  const check = h.deps.vision.check;
+  h.deps.vision.check = async b => { if (b.challenge_id === 'power_on') sent.push(b.frames); return check(b); };
+  return { h, sent };
+}
+test('flow: a front-and-back task takes one shot per side on "ready", then one Gemini try with those shots', async () => {
+  const { h, sent } = guided('Show the front and back of the jacket', { commands: ['ready', 'ready'] });
+  const state = await runCall(h.deps);
+  assert.equal(sent.length, 1);                    // one try
+  assert.deepEqual(sent[0], ['f1', 'f3']);         // the newest frame at each "ready"
+  assert.ok(h.said.includes('Front.') && h.said.includes('Back.'));
+  assert.ok(h.shown.some(c => /^Shot 1 of 2: Front/.test(c.note ?? '')));
+  assert.ok(h.shown.some(c => /^Shot 2 of 2: Back/.test(c.note ?? '')));
+  assert.equal(state.results[0].result, 'passed');
+});
+test('flow: a shot is taken anyway when "ready" is not heard', async () => {
+  const { h, sent } = guided('Rotate it slowly', {});
+  await runCall(h.deps);
+  assert.equal(sent[0].length, 4);
+});
+test('flow: "again" retakes the current shot, "skip" ends the task without a Gemini try', async () => {
+  const a = guided('Show the front and back', { commands: ['ready', 'again', 'ready'] });
+  await runCall(a.h.deps);
+  assert.equal(a.h.said.filter(s => s === 'Back.').length, 2);
+  assert.equal(a.sent[0].length, 2);
+  const b = guided('Show the front and back', { commands: ['ready', 'skip'] });
+  const state = await runCall(b.h.deps);
+  assert.equal(b.sent.length, 0);
+  assert.equal(state.results[0].result, 'unverified');
 });
