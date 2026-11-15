@@ -1,11 +1,12 @@
 import { canSubmitSelection, MAX_TESTS, MIN_TESTS, ownTest, selectionMessage, selectionTone } from '../lib/selection'
 import { QRCodeSVG } from 'qrcode.react'
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { createRequest, suggestTests, type CreateResult } from '../api'
+import { createRequest, parseListing, suggestTests, type CreateResult, type ListingResult } from '../api'
 import { guessCategory } from '../lib/catalog'
 import { CATEGORY_LABEL } from '../lib/format'
-import type { SuggestResponse } from '../types'
+import { findUrl, imageToDataUrl } from '../lib/listing'
+import type { Category, SuggestResponse } from '../types'
 import { buttonPrimary, buttonSecondary, Card, Page } from '../components/ui'
 
 const field = 'block h-12 w-full rounded-xl border border-line bg-card px-4 outline-none transition-colors focus:border-ink'
@@ -27,25 +28,131 @@ export default function NewCheck() {
   const [fresh, setFresh] = useState<Set<string>>(new Set()) // ids that just arrived ("New" tag)
   const [notice, setNotice] = useState<string | null>(null)
   const latest = useRef(0) // ignore answers from older suggest calls
+  const [reading, setReading] = useState(false) // reading a pasted listing link or screenshot
+  const [listingNote, setListingNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const [askShot, setAskShot] = useState(false) // link unreadable: offer a screenshot
+  const latestListing = useRef(0)
+  const lastRead = useRef<string | null>(null) // link already read, so blur or edits don't re-read it
 
   const name = itemName.trim()
   const stale = suggestion !== null && name !== suggestedFor
 
-  const suggest = async (e?: FormEvent) => {
+  const suggest = async (e?: FormEvent, forName = name, category?: Category | null) => {
     e?.preventDefault()
-    if (!name || suggesting) return
+    if (!forName || suggesting) return
     const call = ++latest.current
     setSuggesting(true)
     setError(null)
-    const res = await suggestTests({ item_name: name, category: guessCategory(name) })
+    const res = await suggestTests({ item_name: forName, category: category ?? guessCategory(forName) })
     if (call !== latest.current) return
     setSuggestion(res)
-    setSuggestedFor(name)
+    setSuggestedFor(forName)
     setSelected(new Set(res.tests.slice(0, MIN_TESTS).map((t) => t.id))) // the buyer ticks up to 5
     setRejected([])
     setFresh(new Set())
     setNotice(null)
     setSuggesting(false)
+  }
+
+  // A pasted listing link (or screenshot) fills in the item name, then picks the tests for it.
+  const applyListing = (res: ListingResult, from: 'link' | 'screenshot') => {
+    if (res.reason === 'not_for_sale') {
+      setAskShot(false)
+      setListingNote({
+        ok: false,
+        text: "That listing doesn't look like an item for sale (maybe a lost pet or a wanted post). Type what you're buying below.",
+      })
+      return
+    }
+    if (!res.item_name) {
+      setAskShot(true)
+      setListingNote({
+        ok: false,
+        text: from === 'link'
+          ? `Couldn't read that ${res.site ?? 'link'} listing. Tap the picture icon to add a screenshot, or type the item below.`
+          : "Couldn't read that screenshot. Type what you're buying below.",
+      })
+      return
+    }
+    setAskShot(false)
+    setListingNote({ ok: true, text: `Found on ${res.site ?? (from === 'screenshot' ? 'your screenshot' : 'the listing')}` })
+    setItemName(res.item_name)
+    void suggest(undefined, res.item_name.trim(), res.category)
+  }
+
+  const readLink = async (raw: string) => {
+    const url = findUrl(raw)
+    if (!url) {
+      if (raw.trim()) setListingNote({ ok: false, text: 'That doesn’t look like a link. Paste the listing’s URL.' })
+      return
+    }
+    setListingUrl(url)
+    lastRead.current = url
+    const call = ++latestListing.current
+    setReading(true)
+    setListingNote(null)
+    const res = await parseListing({ url })
+    if (call !== latestListing.current) return
+    setReading(false)
+    applyListing(res, 'link')
+  }
+
+  const readShot = async (file: Blob | null | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return
+    const call = ++latestListing.current
+    setReading(true)
+    setListingNote(null)
+    let res: ListingResult
+    try {
+      res = await parseListing({ image: await imageToDataUrl(file) })
+    } catch {
+      res = { item_name: null, category: null, site: null, source: null }
+    }
+    if (call !== latestListing.current) return
+    setReading(false)
+    applyListing(res, 'screenshot')
+  }
+
+  const onLinkPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const image = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'))
+    if (image) {
+      e.preventDefault()
+      void readShot(image)
+      return
+    }
+    const text = e.clipboardData.getData('text')
+    if (findUrl(text)) {
+      e.preventDefault()
+      setListingUrl(findUrl(text)!)
+      void readLink(text)
+    }
+  }
+  // Paste events don't fire for iOS keyboard suggestions, autofill or drag-in text: treat any
+  // multi-character insertion that contains a link as a paste and read it right away.
+  const onLinkChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.value
+    const jumped = next.length - listingUrl.length >= 8
+    setListingUrl(next)
+    if (jumped && findUrl(next) && findUrl(next) !== lastRead.current) void readLink(next)
+  }
+  const onLinkKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    void readLink(listingUrl)
+  }
+  // Typed by hand: read when the buyer leaves the box, so no Enter is needed.
+  const onLinkBlur = () => {
+    if (findUrl(listingUrl) && findUrl(listingUrl) !== lastRead.current) void readLink(listingUrl)
+  }
+  const onLinkDrop = (e: DragEvent<HTMLInputElement>) => {
+    const image = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+    if (!image) return
+    e.preventDefault()
+    void readShot(image)
+  }
+  const onShotPick = (e: ChangeEvent<HTMLInputElement>) => {
+    void readShot(e.target.files?.[0])
+    e.target.value = '' // picking the same file again still fires
   }
 
   // Keep the checked tests, ask Gemini for new ones in place of the unchecked.
@@ -141,7 +248,7 @@ export default function NewCheck() {
         item_name: name,
         category: suggestion.category,
         tests: [...(pending ? [pending] : []), ...suggestion.tests.filter((t) => selected.has(t.id))],
-        ...(listingUrl.trim() && { listing_url: listingUrl.trim() }),
+        ...(findUrl(listingUrl) && { listing_url: findUrl(listingUrl)! }),
       })
       setCreated(res)
       window.scrollTo({ top: 0 })
@@ -159,7 +266,57 @@ export default function NewCheck() {
       <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-tight">New check</h1>
       <p className="mt-1 text-muted">Tell us what you're buying. AI picks the tests that prove it works.</p>
 
-      <form onSubmit={suggest} className="mt-6">
+      <div className="mt-6">
+        <label htmlFor="listing-link" className="text-sm font-medium">
+          Listing link <span className="font-normal text-faint">(optional)</span>
+        </label>
+        <div className="relative mt-1.5">
+          <input
+            id="listing-link"
+            className={`${field} pr-14 text-base`}
+            type="url"
+            inputMode="url"
+            value={listingUrl}
+            onChange={onLinkChange}
+            onPaste={onLinkPaste}
+            onKeyDown={onLinkKey}
+            onBlur={onLinkBlur}
+            onDrop={onLinkDrop}
+            placeholder="Paste a Marketplace, eBay, OfferUp… link"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="go"
+            readOnly={reading}
+          />
+          <label
+            className={`absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-xl transition-colors hover:text-ink ${askShot ? 'text-accent' : 'text-faint'} ${reading ? 'pointer-events-none' : ''}`}
+            title="Use a screenshot of the listing"
+          >
+            <input type="file" accept="image/*" className="sr-only" onChange={onShotPick} disabled={reading} />
+            <span className="sr-only">Use a screenshot of the listing</span>
+            {reading ? (
+              <span className="size-5 animate-spin rounded-full border-2 border-line border-t-ink" aria-hidden />
+            ) : (
+              <ImageIcon />
+            )}
+          </label>
+        </div>
+        <p
+          className={`mt-1.5 text-xs ${listingNote && !listingNote.ok ? 'text-unv' : 'text-faint'}`}
+          role="status"
+          aria-live="polite"
+        >
+          {reading
+            ? 'Reading the listing…'
+            : listingNote
+              ? (listingNote.ok ? '✓ ' : '') + listingNote.text
+              : 'Paste a link, or tap the picture icon to use a screenshot.'}
+        </p>
+      </div>
+
+      <form onSubmit={suggest} className="mt-5">
         <label className="block">
           <span className="text-sm font-medium">What are you buying?</span>
           <input
@@ -188,10 +345,17 @@ export default function NewCheck() {
             <div className="flex items-end justify-between gap-3">
               <legend className="min-w-0 text-sm font-medium">
                 Tests for <span className="wrap-break-word">{suggestedFor}</span>
-                <span className="block text-xs font-normal text-faint">
-                  {CATEGORY_LABEL[suggestion.category] ?? suggestion.category} ·{' '}
-                  {suggestion.source === 'gemini' ? 'picked by Gemini' : 'standard list (AI suggestions unavailable)'}
-                </span>
+                {suggestion.source !== 'gemini' && suggestion.category === 'other' ? (
+                  <span className="block text-xs font-normal text-unv">
+                    Couldn't match tests to this item. These are general checks: add your own below, or try a
+                    clearer name (brand and model).
+                  </span>
+                ) : (
+                  <span className="block text-xs font-normal text-faint">
+                    {CATEGORY_LABEL[suggestion.category] ?? suggestion.category} ·{' '}
+                    {suggestion.source === 'gemini' ? 'picked by Gemini' : 'standard list (AI suggestions unavailable)'}
+                  </span>
+                )}
               </legend>
               <button
                 type="button"
@@ -283,22 +447,6 @@ export default function NewCheck() {
             </div>
             <p className="mt-1.5 text-xs text-faint">Press Enter or Add to put it at the top of the list.</p>
           </div>
-
-          <label className="block">
-            <span className="text-sm font-medium">
-              Listing link <span className="font-normal text-faint">(optional)</span>
-            </span>
-            <input
-              className={input}
-              type="url"
-              inputMode="url"
-              value={listingUrl}
-              onChange={(e) => setListingUrl(e.target.value)}
-              placeholder="https://"
-              autoComplete="off"
-              disabled={stale}
-            />
-          </label>
 
           {error && (
             <p className="rounded-xl bg-fail-soft px-4 py-3 text-sm text-fail" role="alert">
@@ -415,5 +563,16 @@ function Created({ res, itemName }: { res: CreateResult; itemName: string }) {
         </Link>
       </p>
     </Page>
+  )
+}
+
+/** "Use a screenshot" glyph: a picture frame with a mountain and sun. */
+function ImageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      <circle cx="9" cy="10" r="1.8" />
+      <path d="m21 16-5-5-8 9" />
+    </svg>
   )
 }

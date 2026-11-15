@@ -23,6 +23,17 @@ POST /tests/suggest
   → { category, tests: [{id,label,prompt,expect}], source: "gemini" | "catalog" }
   Returns only new suggestions; keep/exclude are respected. Default count is 6 - keep.length.
 
+POST /listing/parse
+  body: exactly one of { url } | { text } | { image: "data:image/...;base64,..." }
+  → { item_name: string|null, category: "console"|"phone"|"laptop"|"other"|null,
+      site: string|null, image_url: string|null,
+      source: "link"|"link_url"|"text"|"screenshot"|null,
+      reason?: "unreadable_link"|"unreadable_text"|"unreadable_image"|"not_for_sale" }
+  Never errors on a bad page: item_name is null and reason says why. item_name is always English,
+  whatever the listing's language. Fetch is capped at 7 s and Gemini naming at 6 s. Mercari, Swappa
+  and Depop block preview bots, so they skip the fetch (URL words, else ask for a screenshot).
+  The web then calls /tests/suggest with item_name and category.
+
 POST /requests
   body: { item_name, category: "console"|"phone"|"laptop"|"other", listing_url?,
           tests: [test_id | {id,label,prompt,expect}], custom_test? }
