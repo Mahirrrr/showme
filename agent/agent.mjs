@@ -17,6 +17,7 @@ import { runAgent } from './chert-rooms.mjs';
 import { makeCodeListener, parseCode } from './code.mjs';
 import { runCall } from './flow.mjs';
 import { FrameBuffer, attachCallerVideo, toJpegBase64, makeCallerEncoder } from './frames.mjs';
+import catalog from '../shared/tests.json' with { type: 'json' }; // test order for the call (flow.orderChallenges)
 import { greetOnBridgeReady } from './greet.mjs';
 import { makeVision } from './vision.mjs';
 
@@ -127,6 +128,7 @@ const agent = defineAgent({
         return frames;
       },
       vision,
+      catalog,
       sleep: ms => new Promise(r => setTimeout(r, ms)),
       now: () => Date.now(),
       log: console.log,
