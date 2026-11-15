@@ -7,14 +7,16 @@
 export const LIMITS = {
   maxAttempts: 3,          // vision accepts attempts 1 to 3
   checkWindowMs: 30_000,   // each check gets up to 30 s; it ends early on a pass
-  firstLookMs: 5_000,      // time to do the action after the prompt
-  retryGapMs: 7_000,       // pause between silent retries (the hint is on screen meanwhile)
+  actMs: 2_500,            // after the prompt is spoken, time to do the action before the first look
+  retryGapMs: 3_000,       // pause between silent retries (the hint is on screen meanwhile)
   noFrameRetryMs: 2_000,   // look again this soon when the camera shows nothing
   callBudgetMs: 270_000,   // never start a check that can't end by 4:30 (5-minute FaceTime cap)
   codeListenMs: 12_000,
 };
 
 const say1 = (text) => text.replace(/\s+/g, ' ').trim();
+/** What the agent says for a prompt: the card keeps the buyer's words, the voice skips a leading "Please". */
+const spoken = (prompt) => { const t = say1(prompt).replace(/^please,?\s+/i, ''); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 // Rough stage of a test from its wording, for tests Gemini wrote (not in the catalog):
 // 0 = turn it on, 1 = on-screen info (Settings, About, battery, IMEI…), 2 = physical (ports, sides, scratches).
@@ -93,9 +95,9 @@ export async function runCall(deps, limits = LIMITS) {
     const ch = challenges[i];
     const card = { step: i + 1, total: challenges.length, title: request.item_name, prompt: ch.prompt };
     show({ ...card, status: 'waiting' });
-    await say(ch.prompt);
-    const deadline = now() + limits.checkWindowMs;
-    await sleep(limits.firstLookMs);
+    const shownAt = now(), deadline = shownAt + limits.checkWindowMs; // the window opens with the card, not after the speech
+    await say(spoken(ch.prompt));
+    await sleep(limits.actMs);
     let attempt = 0, last = null;
     while (attempt < limits.maxAttempts && now() < deadline) {
       // The contract wants 2 to 4 frames; fewer counts as no frames (vision would reject it with a 422).
@@ -108,8 +110,10 @@ export async function runCall(deps, limits = LIMITS) {
       }
       attempt++;
       show({ ...card, status: 'checking' });
+      const askedAt = now();
       try {
         last = await vision.check({ request_id: request.request_id, challenge_id: ch.id, attempt, frames: grabbed });
+        log(`[timing] check ${i + 1}.${attempt}: ${last.result} in ${now() - askedAt} ms (${now() - shownAt} ms into this check)`);
       } catch (error) {
         log(`[flow] check failed: ${error.message}`);
         last = { result: 'unverified', confidence: 0, reason: 'The check timed out.' };
@@ -122,6 +126,7 @@ export async function runCall(deps, limits = LIMITS) {
     }
     const result = last?.result ?? 'unverified';
     show({ ...card, status: result, note: result === 'passed' ? '' : last ? hintFor(last) : 'No camera view' });
+    log(`[timing] check ${i + 1} done: ${result} after ${now() - shownAt} ms, ${attempt} attempt(s)`);
     if (result === 'passed') await say('Got it.');
     state.results.push({ id: ch.id, kind: ch.kind, result, attempts: attempt });
   }

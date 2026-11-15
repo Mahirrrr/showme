@@ -255,6 +255,26 @@ test('flow: a check gives up within its 30 s window, retries included', async ()
   await runCall(h.deps);
   assert.ok(endedAt - startedAt <= LIMITS.checkWindowMs, `attempts spread over ${endedAt - startedAt} ms`);
 });
+test('flow: the first look comes soon after the prompt ends, and retries are quick', async () => {
+  const h = harness({ results: { power_on: ['unverified', 'unverified', 'passed'] }, clockStep: 4000 }); // each line takes 4 s
+  const times = [];
+  const check = h.deps.vision.check;
+  h.deps.vision.check = async b => { if (b.challenge_id === 'power_on') times.push(h.clock()); return check(b); };
+  let promptEnd = null;
+  const say = h.deps.say;
+  h.deps.say = async text => { await say(text); if (text.startsWith('Turn it on')) promptEnd = h.clock(); };
+  await runCall(h.deps);
+  assert.ok(times[0] - promptEnd <= LIMITS.actMs, `first look ${times[0] - promptEnd} ms after the prompt`);
+  assert.ok(times[1] - times[0] <= LIMITS.retryGapMs, `retry gap ${times[1] - times[0]} ms`);
+});
+test('flow: the spoken prompt drops a leading "Please"', async () => {
+  const h = harness();
+  const start = h.deps.vision.start;
+  h.deps.vision.start = async id => { const r = await start(id); r.challenges[0].prompt = 'Please zoom in on the legs.'; return r; };
+  await runCall(h.deps);
+  assert.ok(h.said.includes('Zoom in on the legs.'));
+  assert.ok(h.shown.some(c => c.prompt === 'Please zoom in on the legs.')); // the card keeps the buyer's words
+});
 test('flow: a non-pass shows an on-screen hint from vision while it waits', async () => {
   const h = harness({ results: { power_on: ['unverified', 'passed'] } });
   await runCall(h.deps);
