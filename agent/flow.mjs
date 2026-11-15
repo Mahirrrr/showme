@@ -5,29 +5,59 @@
 //       grabFrames() → base64 JPEG[]; vision (see vision.mjs); sleep(ms); now() → ms; log(msg)
 
 export const LIMITS = {
-  maxAttempts: 3,        // 1 try + 2 retries
-  settleMs: 4000,        // time to do the action after the prompt
-  noFrameWaits: 2,       // "I can't see you" prompts that don't use up an attempt
-  callBudgetMs: 270_000, // stop at 4:30, under the 5-minute FaceTime cap
+  maxAttempts: 3,          // vision accepts attempts 1 to 3
+  checkWindowMs: 30_000,   // each check gets up to 30 s; it ends early on a pass
+  firstLookMs: 5_000,      // time to do the action after the prompt
+  retryGapMs: 7_000,       // pause between silent retries (the hint is on screen meanwhile)
+  noFrameRetryMs: 2_000,   // look again this soon when the camera shows nothing
+  callBudgetMs: 270_000,   // never start a check that can't end by 4:30 (5-minute FaceTime cap)
   codeListenMs: 12_000,
 };
 
 const say1 = (text) => text.replace(/\s+/g, ' ').trim();
 
+/**
+ * Logical order: the buyer's tests in catalog order (shared/tests.json lists them so that each step
+ * leads into the next, e.g. power on before Settings screens), then a custom test, then the secret
+ * liveness challenges. Vision returns them shuffled. Stable for anything not in the catalog.
+ */
+export function orderChallenges(challenges, catalog = {}) {
+  const rankOf = new Map();
+  for (const tests of Object.values(catalog)) tests.forEach((t, i) => { if (!rankOf.has(t.prompt)) rankOf.set(t.prompt, i); });
+  const group = c => (c.kind === 'liveness' ? 2 : c.kind === 'custom' ? 1 : 0);
+  return challenges
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => group(a.c) - group(b.c)
+      || (rankOf.get(a.c.prompt) ?? 99) - (rankOf.get(b.c.prompt) ?? 99)
+      || a.i - b.i)
+    .map(x => x.c);
+}
+
+/** On-screen guidance after a check that didn't pass: vision's reason, short enough for the card. */
+export function hintFor(verdict, max = 100) {
+  const lead = verdict.result === 'failed' ? 'Not yet' : 'Not clear yet';
+  const reason = say1(verdict.reason ?? '');
+  if (!reason) return `${lead}. Hold it steady, closer to the camera.`;
+  const text = `${lead}: ${reason}`;
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : cut.length)}…`;
+}
+
 export async function runCall(deps, limits = LIMITS) {
-  const { say, show, listenForCode, grabFrames, vision, sleep, now, log = () => {} } = deps;
+  const { say, show, listenForCode, grabFrames, vision, sleep, now, log = () => {}, catalog } = deps;
   const startedAt = now();
-  const outOfTime = () => now() - startedAt > limits.callBudgetMs;
+  const timeLeft = () => limits.callBudgetMs - (now() - startedAt);
   const state = { request: null, results: [], finished: false };
 
   // 1. Greet and link the call to a request.
   show({ prompt: 'Flip to your back camera, then say the 4-digit code from the link', status: 'info' });
-  await say("Hi, I'm ShowMe, an AI that runs a live check for the buyer. Please flip to your back camera. What's the 4-digit code on your link?");
+  await say("Hi, I'm ShowMe. Flip to your back camera and say the 4-digit code from the link.");
   let code = await listenForCode(limits.codeListenMs);
   let request = code ? await vision.byCode(code) : null;
   if (!request) {
     show({ prompt: 'Say the 4 digits one more time.', status: 'info' });
-    await say('Sorry, I missed that. Please say the four digits one more time.');
+    await say('Sorry, say the four digits again.');
     code = await listenForCode(limits.codeListenMs);
     request = code ? await vision.byCode(code) : null;
   }
@@ -37,53 +67,54 @@ export async function runCall(deps, limits = LIMITS) {
   }
   if (!request) {
     show({ prompt: 'No check is waiting. Ask the buyer for a new link.', status: 'failed', note: 'No check found' });
-    await say("I can't find a check waiting for you. Please ask the buyer for a new link. Goodbye.");
+    await say("I can't find a check for you. Ask the buyer for a new link. Goodbye.");
     return state;
   }
   state.request = request;
 
-  // 2. Start: the buyer's tests plus the secret liveness challenges.
-  const { challenges } = await vision.start(request.request_id);
-  await say(`Thanks. This is a live check for the ${request.item_name}. I'll ask for ${challenges.length} quick things. Keep the item in view.`);
+  // 2. Start: the buyer's tests plus the secret liveness challenges, in an order that makes sense.
+  const { challenges: raw } = await vision.start(request.request_id);
+  const challenges = orderChallenges(raw, catalog);
+  await say(`Thanks. ${challenges.length} quick checks. Keep the ${request.item_name} in view.`);
 
-  // 3. Each challenge: card + voice, wait, check, retry up to the limit.
+  // 3. Each challenge: say it once, then look for up to 30 s. Retries are silent; the card says what's wrong.
+  let nudged = false;
   for (let i = 0; i < challenges.length; i++) {
-    if (outOfTime()) { log('[flow] call budget reached'); break; }
+    if (timeLeft() < limits.checkWindowMs) { log('[flow] call budget reached'); break; }
     const ch = challenges[i];
     const card = { step: i + 1, total: challenges.length, title: request.item_name, prompt: ch.prompt };
-    let attempt = 0, noFrame = 0, last = null;
-    while (attempt < limits.maxAttempts && !outOfTime()) {
-      show({ ...card, status: 'waiting' });
-      await say(attempt === 0 ? ch.prompt : `Let's try that again. ${ch.prompt}`);
-      await sleep(limits.settleMs);
+    show({ ...card, status: 'waiting' });
+    await say(ch.prompt);
+    const deadline = now() + limits.checkWindowMs;
+    await sleep(limits.firstLookMs);
+    let attempt = 0, last = null;
+    while (attempt < limits.maxAttempts && now() < deadline) {
       // The contract wants 2 to 4 frames; fewer counts as no frames (vision would reject it with a 422).
       const grabbed = grabFrames();
-      const frames = grabbed.length >= 2 ? grabbed : [];
-      if (frames.length === 0 && noFrame < limits.noFrameWaits) {
-        noFrame++;
-        show({ ...card, status: 'waiting', note: "I can't see you" });
-        await say("I can't see anything. Point the camera at the item.");
+      if (grabbed.length < 2) {
+        show({ ...card, status: 'waiting', note: "I can't see it. Point the camera at the item." });
+        if (!nudged) { nudged = true; await say("I can't see anything. Point the camera at the item."); }
+        await sleep(limits.noFrameRetryMs);
         continue;
       }
       attempt++;
       show({ ...card, status: 'checking' });
-      if (frames.length === 0) {
-        last = { result: 'unverified', confidence: 0, reason: 'no camera frames' };
-      } else {
-        try {
-          last = await vision.check({ request_id: request.request_id, challenge_id: ch.id, attempt, frames });
-        } catch (error) {
-          log(`[flow] check failed: ${error.message}`);
-          last = { result: 'unverified', confidence: 0, reason: 'check timed out' };
-        }
+      try {
+        last = await vision.check({ request_id: request.request_id, challenge_id: ch.id, attempt, frames: grabbed });
+      } catch (error) {
+        log(`[flow] check failed: ${error.message}`);
+        last = { result: 'unverified', confidence: 0, reason: 'The check timed out.' };
       }
-      show({ ...card, status: last.result });
-      if (last.result === 'passed') { await say('Got it.'); break; }
-      if (attempt >= limits.maxAttempts) {
-        await say(last.result === 'failed' ? "That didn't pass. Moving on." : "I couldn't see it clearly. I'll mark it unverified.");
+      if (last.result === 'passed') break;
+      if (attempt < limits.maxAttempts && now() < deadline) {
+        show({ ...card, status: 'waiting', note: hintFor(last) });
+        await sleep(limits.retryGapMs);
       }
     }
-    state.results.push({ id: ch.id, kind: ch.kind, result: last?.result ?? 'unverified', attempts: attempt });
+    const result = last?.result ?? 'unverified';
+    show({ ...card, status: result, note: result === 'passed' ? '' : last ? hintFor(last) : 'No camera view' });
+    if (result === 'passed') await say('Got it.');
+    state.results.push({ id: ch.id, kind: ch.kind, result, attempts: attempt });
   }
 
   // 4. Finish: the report goes to the buyer's link.
@@ -92,6 +123,6 @@ export async function runCall(deps, limits = LIMITS) {
   const s = done.summary;
   const headline = s.liveness === 'failed' ? 'Live check failed' : s.failed === 0 && s.unverified === 0 ? 'Verified live' : 'Check complete';
   show({ prompt: `${headline}. The report is on the buyer's link.`, status: s.liveness === 'failed' ? 'failed' : s.failed || s.unverified ? 'unverified' : 'passed', note: `${s.passed} passed · ${s.failed} failed · ${s.unverified} unverified` });
-  await say(say1(`All done. ${s.passed} of ${s.total} checks passed. The buyer can see the report on their link now. Thanks, goodbye.`));
+  await say(say1(`All done. ${s.passed} of ${s.total} passed. The report is on the buyer's link. Goodbye.`));
   return state;
 }

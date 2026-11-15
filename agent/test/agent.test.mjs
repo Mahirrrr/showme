@@ -5,7 +5,8 @@ import { renderCard, withPulse, wrapText, WIDTH, HEIGHT, COLUMN } from '../card.
 import { FrameBuffer, toJpegBase64, findCallerStrip, cropToCallerVideo, makeCallerEncoder } from '../frames.mjs';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
-import { runCall, LIMITS } from '../flow.mjs';
+import { runCall, LIMITS, orderChallenges, hintFor } from '../flow.mjs';
+import catalog from '../../shared/tests.json' with { type: 'json' };
 
 // ---------- code listener (sellers say the code while the greeting is still playing)
 test('makeCodeListener: a code heard before listening starts is kept', async () => {
@@ -199,9 +200,9 @@ function harness({ codes = ['4827'], frames = ['jpg', 'jpg'], results, checkThro
     show: card => shown.push(card),
     listenForCode: async () => codes.shift() ?? null,
     grabFrames: () => (typeof frames === 'function' ? frames() : frames),
-    vision, sleep: async () => {}, now: () => t,
+    vision, sleep: async ms => { t += ms; }, now: () => t,
   };
-  return { deps, said, shown, vision };
+  return { deps, said, shown, vision, clock: () => t };
 }
 
 test('flow: happy path checks every challenge and finishes', async () => {
@@ -240,18 +241,65 @@ test('flow: vision errors count as unverified attempts, never passed', async () 
   const state = await runCall(h.deps);
   assert.ok(state.results.every(r => r.result === 'unverified' && r.attempts === 3));
 });
-test('flow: no camera frames never reach vision and end unverified', async () => {
+test('flow: each prompt is spoken once, retries are silent', async () => {
+  const h = harness({ results: { buttons: 'failed' } });
+  await runCall(h.deps);
+  assert.equal(h.said.filter(s => s.includes('Press each button')).length, 1);
+  assert.ok(!h.said.some(s => /try that again/i.test(s)));
+});
+test('flow: a check gives up within its 30 s window, retries included', async () => {
+  const h = harness({ results: { power_on: 'unverified' } });
+  let startedAt = null, endedAt = null;
+  const check = h.deps.vision.check;
+  h.deps.vision.check = async b => { if (b.challenge_id === 'power_on') { startedAt ??= h.clock(); endedAt = h.clock(); } return check(b); };
+  await runCall(h.deps);
+  assert.ok(endedAt - startedAt <= LIMITS.checkWindowMs, `attempts spread over ${endedAt - startedAt} ms`);
+});
+test('flow: a non-pass shows an on-screen hint from vision while it waits', async () => {
+  const h = harness({ results: { power_on: ['unverified', 'passed'] } });
+  await runCall(h.deps);
+  assert.ok(h.shown.some(c => c.status === 'waiting' && /mock unverified/i.test(c.note ?? '')));
+});
+test('flow: no camera frames never reach vision, end unverified, and the nudge is spoken once', async () => {
   const h = harness({ frames: [] });
   const state = await runCall(h.deps);
   assert.equal(h.vision.calls.filter(c => c.name === 'check').length, 0);
   assert.ok(state.results.every(r => r.result === 'unverified'));
-  assert.ok(h.said.some(s => s.includes("can't see")));
+  assert.equal(h.said.filter(s => s.includes("can't see")).length, 1);
+  assert.ok(h.shown.some(c => /point the camera/i.test(c.note ?? '')));
 });
 test('flow: a single frame is not enough (contract: 2 to 4 frames), so it never reaches vision', async () => {
   const h = harness({ frames: ['only-one'] });
   const state = await runCall(h.deps);
   assert.equal(h.vision.calls.filter(c => c.name === 'check').length, 0);
   assert.ok(state.results.every(r => r.result === 'unverified'));
+});
+test('flow: checks run in a sensible order (catalog order, liveness last)', async () => {
+  const h = harness();
+  const state = await runCall({ ...h.deps, catalog });
+  assert.deepEqual(state.results.map(r => r.kind), ['buyer', 'buyer', 'liveness']);
+});
+test('orderChallenges: buyer tests follow the catalog, custom next, secret liveness last', () => {
+  const p = id => catalog.phone.find(t => t.id === id).prompt;
+  const shuffled = [
+    { id: 'a', kind: 'liveness', prompt: 'Tap it twice' },
+    { id: 'b', kind: 'buyer', prompt: p('battery_health') },
+    { id: 'c', kind: 'custom', prompt: 'Show the charger' },
+    { id: 'd', kind: 'buyer', prompt: p('power_on') },
+    { id: 'e', kind: 'buyer', prompt: p('apple_id_signed_out') },
+    { id: 'f', kind: 'liveness', prompt: 'Turn it upside down' },
+    { id: 'g', kind: 'buyer', prompt: p('about_screen') },
+  ];
+  assert.deepEqual(orderChallenges(shuffled, catalog).map(c => c.id), ['d', 'g', 'b', 'e', 'c', 'a', 'f']);
+  assert.deepEqual(orderChallenges([], catalog), []);
+  assert.deepEqual(orderChallenges(shuffled.slice(0, 2), undefined).map(c => c.id), ['b', 'a']); // no catalog: buyer first, still stable
+});
+test('hintFor: short on-screen guidance from the verdict', () => {
+  assert.match(hintFor({ result: 'unverified', reason: 'No serial number or model label is visible.' }), /^Not clear yet: No serial number/);
+  assert.match(hintFor({ result: 'failed', reason: 'The hand is not on top of the item.' }), /^Not yet: The hand/);
+  const long = hintFor({ result: 'unverified', reason: 'word '.repeat(60) });
+  assert.ok(long.length <= 100 && long.endsWith('…'));
+  assert.equal(hintFor({ result: 'unverified', reason: '' }), 'Not clear yet. Hold it steady, closer to the camera.');
 });
 test('flow: call budget stops early but still finishes the report', async () => {
   const h = harness({ clockStep: 60_000 }); // each spoken line "takes" a minute
