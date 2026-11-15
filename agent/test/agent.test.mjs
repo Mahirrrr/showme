@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCode, makeCodeListener } from '../code.mjs';
 import { renderCard, withPulse, wrapText, WIDTH, HEIGHT, COLUMN } from '../card.mjs';
-import { FrameBuffer, toJpegBase64 } from '../frames.mjs';
+import { FrameBuffer, toJpegBase64, findCallerStrip, cropToCallerVideo, makeCallerEncoder } from '../frames.mjs';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
 import { runCall, LIMITS } from '../flow.mjs';
 
@@ -104,6 +105,61 @@ test('toJpegBase64 encodes and scales an RGBA frame', () => {
   const b64 = toJpegBase64({ data, width, height }, { maxWidth: 400 });
   const bytes = Buffer.from(b64, 'base64');
   assert.equal(bytes[0], 0xff); assert.equal(bytes[1], 0xd8); // JPEG magic
+});
+
+// ---------- FaceTime-window crop (the caller's phone number must never leave the laptop)
+/** 1280x720 black frame with a grey portrait strip at x0..x0+480, a red top bar (y < 60) and a blue bottom (y >= 580) inside it. */
+function faceTimeFrame({ x0 = 400, stripW = 480, width = 1280, height = 720, grey = 120 } = {}) {
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) for (let x = x0; x < x0 + stripW; x++) {
+    const i = (y * width + x) * 4;
+    const [r, g, b] = y < 60 ? [255, 0, 0] : y >= 580 ? [0, 0, 255] : [grey, grey, grey];
+    data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255;
+  }
+  for (let i = 3; i < data.length; i += 4) data[i] = 255;
+  return { data, width, height, facetime: true };
+}
+async function decode(b64) {
+  const img = await loadImage(Buffer.from(b64, 'base64'));
+  const c = createCanvas(img.width, img.height); const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  return { width: img.width, height: img.height, px: (x, y) => [...g.getImageData(x, y, 1, 1).data.slice(0, 3)] };
+}
+
+test('findCallerStrip finds the strip wherever FaceTime put it', () => {
+  assert.deepEqual(findCallerStrip(faceTimeFrame({ x0: 400 })), { x: 400, width: 480 });
+  assert.deepEqual(findCallerStrip(faceTimeFrame({ x0: 64 })), { x: 64, width: 480 });
+});
+test('findCallerStrip finds a dark but not black strip', () => {
+  assert.deepEqual(findCallerStrip(faceTimeFrame({ grey: 10 })), { x: 400, width: 480 });
+});
+test('findCallerStrip: no portrait strip gives null (connecting screen, all black, webcam)', () => {
+  assert.equal(findCallerStrip(faceTimeFrame({ x0: 64, stripW: 1152 })), null); // grey "Connecting..." window
+  assert.equal(findCallerStrip(faceTimeFrame({ stripW: 0 })), null);              // all black
+  const width = 1280, height = 720;
+  assert.equal(findCallerStrip({ data: new Uint8Array(width * height * 4).fill(150), width, height }), null);
+});
+test('cropToCallerVideo cuts the black sides, the top bar and the bottom controls', async () => {
+  const out = await decode(cropToCallerVideo(faceTimeFrame({ x0: 64 })));
+  assert.equal(out.width, 480); assert.equal(out.height, 520);
+  for (const [x, y] of [[2, 2], [240, 1], [478, 3], [2, 517], [240, 518], [478, 517], [240, 260]]) {
+    const [r, g, b] = out.px(x, y);
+    assert.ok(Math.abs(r - 120) < 20 && Math.abs(g - 120) < 20 && Math.abs(b - 120) < 20, `pixel ${x},${y} is ${[r, g, b]}`);
+  }
+});
+test('cropToCallerVideo uses a known strip, and gives null without one', () => {
+  const blank = faceTimeFrame({ stripW: 0 });
+  assert.equal(cropToCallerVideo(blank), null);
+  assert.ok(cropToCallerVideo(blank, { strip: { x: 400, width: 480 } }));
+});
+test('makeCallerEncoder: crops FaceTime frames, remembers the strip, passes other cameras through', async () => {
+  const encode = makeCallerEncoder();
+  assert.equal((await decode(encode(faceTimeFrame({ x0: 400 })))).width, 480);
+  // A frame where the strip can't be measured (very dark scene) reuses the strip from this call.
+  assert.equal((await decode(encode(faceTimeFrame({ stripW: 0 })))).height, 520);
+  assert.equal(makeCallerEncoder()(faceTimeFrame({ stripW: 0 })), null); // never a guess on a new call
+  const width = 640, height = 480;
+  const webcam = { data: new Uint8Array(width * height * 4).fill(150), width, height }; // plain LiveKit room
+  assert.equal((await decode(encode(webcam))).width, 640);
 });
 
 // ---------- vision HTTP client

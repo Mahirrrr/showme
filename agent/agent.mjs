@@ -16,7 +16,7 @@ import { FPS, HEIGHT, WIDTH, renderCard, withPulse } from './card.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { makeCodeListener, parseCode } from './code.mjs';
 import { runCall } from './flow.mjs';
-import { FrameBuffer, attachCallerVideo, toJpegBase64 } from './frames.mjs';
+import { FrameBuffer, attachCallerVideo, toJpegBase64, makeCallerEncoder } from './frames.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
 import { makeVision } from './vision.mjs';
 
@@ -40,6 +40,8 @@ const agent = defineAgent({
   entry: async ctx => {
     // Chert's rule: register the video handlers before joining, then subscribe to video too.
     const buffer = new FrameBuffer({ sampleMs: 500, keep: 8 });
+    // Crops FaceTime-window frames to the caller's video (no phone number, no self-view, no buttons).
+    const encodeCallerFrame = makeCallerEncoder();
     const stopVideo = attachCallerVideo(ctx.room, buffer, {
       onFirstFrame: () => { if (process.env.PROBE_FRAMES === '1') void saveProbe(buffer); },
     });
@@ -112,8 +114,10 @@ const agent = defineAgent({
       show: c => { console.log(`[card] ${c.status ?? ''} ${c.prompt ?? ''}`); show(c); },
       listenForCode,
       grabFrames: () => {
-        const frames = buffer.recent(2000, 4).map(f => toJpegBase64(f));
-        // Debug record (logs/ is gitignored): the last frame of every check, to see what the camera saw.
+        const raw = buffer.recent(2000, 4);
+        const frames = raw.map(encodeCallerFrame).filter(Boolean);
+        if (frames.length < raw.length) console.log(`[frames] dropped ${raw.length - frames.length} of ${raw.length}: no caller strip found`);
+        // Debug record (logs/ is gitignored): the last cropped frame of every check, exactly what vision gets.
         if (process.env.SAVE_FRAMES === '1' && frames.length) {
           const dir = fileURLToPath(new URL('./logs/frames/', import.meta.url));
           void mkdir(dir, { recursive: true })
