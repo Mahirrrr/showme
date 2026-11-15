@@ -88,6 +88,12 @@ Read this after `showme/CLAUDE.md`. It says where the `agent/` work stands, what
    - Agent now runs as `VISION_URL=https://showme.photo/api MOCK_VISION=0 SAVE_FRAMES=1 nohup npm start` in `agent/` (env overrides `.env.local`). `chert dev` restarted after it.
    - `LINE_NUMBER` for the server is `+17025109706` (sent to Wan for the FaceTime button on `/v/<token>`). If the line is ever released and re-onboarded, the number can change: re-check with `doctor` and update the server.
    - Domain: Wan still has to confirm it was claimed with the MLH GoDaddy Registry offer.
+1e. **About 9:20 PM: calmer call flow (`72fea97`), after the first full live call (8:50 PM).**
+   - Live call result: 4 passed, crop clean, but the call was hung up at 4:32 and the agent aborted, so the buyer got no report. Gemini also rejected a clear `*#06#` IMEI screen (tell Youngjun).
+   - Changes: catalog order with liveness last; each prompt spoken once; up to 3 silent attempts in a 30 s window; on-screen hints from Gemini's reason; the no-camera nudge is spoken once per call; a check starts only if it fits in the budget; shorter lines. 37 tests pass. Agent and `chert dev` restarted against showme.photo.
+   - "I ticked 3 but got 6": Wan's `web/src/api.ts` `createRequest` sends full test objects (contract v4); vision answers 422; the fallback then sends **every** catalog test for the category. Fix in Wan's folder: send only the ticked ids that exist in the catalog.
+   - Grey screen at call start: the Chert line has `connecting_screen_dismissal: "audio"`. The docs say per-line presentation sets "handoff when audio or video is ready"; there is no public API for it, so change it in the Chert console (Lines) or ask Gary.
+   - Open: on hang-up after at least one check, finish with partial results instead of aborting (needs Mahir's OK).
 2. **Real Gemini judging:** get Youngjun's `MONGODB_URI` (by DM), set `MOCK=0` and `GEMINI_API_KEY` in `../showme-vision/vision/.env`, restart uvicorn, and run the agent with `MOCK_VISION=0`. Wrong answers must come back `failed` or `unverified`.
 3. **Merge 1 at 8 PM:** end to end in a plain LiveKit room. Webcam, agent, real `vision/`, and `/v/<token>` updating live. Then merge the branches into `main` (Mahir's job).
 4. **Devpost draft by 10:30 PM** (hard cutoff 11:59 PM Saturday).
