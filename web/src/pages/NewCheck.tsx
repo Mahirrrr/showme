@@ -138,7 +138,7 @@ export default function NewCheck() {
             className={input}
             value={itemName}
             onChange={(e) => setItemName(e.target.value)}
-            placeholder="PS5 DualSense controller"
+            placeholder="Type what you want to buy"
             maxLength={80}
             autoComplete="off"
             enterKeyHint="go"
@@ -228,7 +228,7 @@ export default function NewCheck() {
               className={input}
               value={customTest}
               onChange={(e) => setCustomTest(e.target.value)}
-              placeholder="Show the charging port up close"
+              placeholder="Type a test of your own"
               maxLength={140}
               autoComplete="off"
               disabled={stale}
