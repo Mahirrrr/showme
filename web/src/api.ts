@@ -6,6 +6,7 @@ import { canSubmitSelection } from './lib/selection'
 //   Test suggestions always hit /api/tests/suggest on vision/ (Gemini when it has a key).
 import { catalog, guessCategory } from './lib/catalog'
 import type {
+  Category,
   CreateRequestBody,
   CreateResponse,
   RequestView,
@@ -72,6 +73,23 @@ export async function suggestTests(body: SuggestBody): Promise<SuggestResponse> 
     const count = body.count ?? 6 - (body.keep?.length ?? 0)
     const tests = catalog[category].filter((t) => !used.has(t.id) && !used.has(t.label)).slice(0, count)
     return { category, tests: structuredClone(tests), source: 'catalog' }
+  }
+}
+
+export interface ListingResult {
+  item_name: string | null
+  category: Category | null
+  site: string | null
+  source: 'link' | 'link_url' | 'screenshot' | 'text' | null
+  reason?: string
+}
+
+/** Pasted listing link, or a screenshot as a data URL, to an item name. Never throws. */
+export async function parseListing(body: { url: string } | { image: string }): Promise<ListingResult> {
+  try {
+    return await request<ListingResult>('/listing/parse', { method: 'POST', body: JSON.stringify(body) })
+  } catch {
+    return { item_name: null, category: null, site: null, source: null, reason: 'unavailable' }
   }
 }
 

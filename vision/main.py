@@ -25,6 +25,7 @@ from .checker import GeminiChecker, MockChecker, unavailable
 from .config import ROOT, Settings
 from .store import Conflict, MemoryStore, MongoStore
 from .scoring import scored_summary
+from .listing import GeminiNamer, ListingRequest, parse_listing
 from .suggest import GeminiSuggester, SuggestRequest, TestSpec, catalog_fallback, slug
 from .thumbs import UnusableEvidence, prepare_frames, thumbnail
 
@@ -113,7 +114,7 @@ def public_view(doc, settings):
     return view
 
 
-def create_app(settings=None, store=None, checker=None, suggester=None):
+def create_app(settings=None, store=None, checker=None, suggester=None, namer=None, fetch=None):
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -126,6 +127,9 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
         app.state.checker = checker if checker is not None else (MockChecker(settings.mock_result) if settings.mock else GeminiChecker(settings))
         # Suggestions only need a Gemini key (no frames, no DB), so they work in MOCK=1 too when a key is set.
         app.state.suggester = suggester if suggester is not None else (GeminiSuggester(settings) if settings.gemini_api_key else None)
+        # Listing names reuse the suggester's Gemini client (same key, no frames, no DB).
+        own_client = getattr(app.state.suggester, 'client', None)
+        app.state.namer = namer if namer is not None else (GeminiNamer(own_client, settings.gemini_model) if own_client else None)
         app.state.settings = settings
         if settings.mock and store is None:
             seed_mock(app.state.store)
@@ -234,6 +238,12 @@ def create_app(settings=None, store=None, checker=None, suggester=None):
             return await asyncio.wait_for(app.state.suggester.suggest(body), timeout=20)
         except Exception:
             return catalog_fallback(body)
+
+    @app.post('/api/listing/parse')
+    async def listing_parse(body: ListingRequest):
+        """Pasted listing link, text or screenshot in; item name out (null + reason when unreadable)."""
+        kw = {'fetch': fetch} if fetch is not None else {}
+        return await parse_listing(body, app.state.namer, **kw)
 
     @app.get('/api/requests/{token}')
     def report(token: str):

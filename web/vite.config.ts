@@ -10,6 +10,6 @@ export default defineConfig({
     fs: { allow: ['..'] },
     // In production nginx proxies /api to uvicorn; in dev Vite does it.
     // /api/tests/suggest (Gemini) is served by vision/ like every other route.
-    proxy: { '/api': 'http://localhost:8000' },
+    proxy: { '/api': process.env.API_URL ?? 'http://localhost:8000' },
   },
 })
