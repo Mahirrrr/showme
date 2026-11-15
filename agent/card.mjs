@@ -1,27 +1,32 @@
 // The agent's own video: one challenge card per state, rendered to RGBA for LiveKit's VideoSource.
+// Style "Aegean": sea-blue field that turns olive on pass and red on fail, marble-white serif type,
+// a Greek key band and Roman numerals (HackUTA 2026's Odyssey theme). Fonts are macOS system fonts.
 import { createCanvas } from '@napi-rs/canvas';
 
 // FaceTime's video on the Mac is 3:2. An iPhone in fill mode shows only a phone-shaped (9:19.5)
-// center column of it; in fit mode it shows the whole frame. So the text lives in that column,
-// drawn as a portrait card, and the background and status bar stretch across the full width.
+// center column of it; in fit mode it shows the whole frame. So the text lives in that column and
+// the background, key band and big numerals stretch across the full width.
 export const WIDTH = 1440;
 export const HEIGHT = 960;
-const P_W = 540, P_H = 1170; // the portrait card's own design size
+const P_W = 540, P_H = 1170; // design space for the column
 const COLUMN_W = Math.round(HEIGHT * P_W / P_H / 2) * 2; // 444: even, about 9:19.5
 export const COLUMN = { x: (WIDTH - COLUMN_W) / 2, width: COLUMN_W };
 const SCALE = HEIGHT / P_H;
-const M = 56; // side margin inside the portrait card
+const M = 48; // side margin inside the column (design units)
 export const FPS = 10;
 
-const COLORS = {
-  bg: '#0f1419', panel: '#1b232c', ink: '#f5f7fa', dim: '#9aa7b4',
-  info: '#3b82f6', waiting: '#3b82f6', checking: '#a78bfa',
-  passed: '#22c55e', failed: '#ef4444', unverified: '#f59e0b',
+const BG = {
+  info: '#14306E', waiting: '#14306E', checking: '#2A2364',
+  passed: '#2E5A2C', failed: '#8E2A1A', unverified: '#8A6512',
 };
-const STATUS_TEXT = {
-  info: '', waiting: 'Show it to the camera', checking: 'Checking…',
-  passed: 'Passed', failed: 'Failed', unverified: 'Unverified', // no ✓/✗: the system font may lack them
-};
+const MARBLE = '#F4F1EA';
+const VERDICT = { passed: 'Passed', failed: 'Failed', unverified: 'Unclear' };
+const FOOTER = { waiting: 'SHOW IT TO THE CAMERA', checking: 'THE ORACLE LOOKS…' };
+const SERIF = 'Baskerville, Georgia, serif';
+const DISPLAY = 'Didot, Baskerville, Georgia, serif';
+
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+export const roman = n => ROMAN[n] ?? String(n);
 
 /** Splits text into lines no wider than maxWidth, using measure(text) → px. */
 export function wrapText(text, maxWidth, measure) {
@@ -35,66 +40,76 @@ export function wrapText(text, maxWidth, measure) {
   return lines;
 }
 
-function drawPortrait({ step, total, title = '', prompt = '', status = 'info', note = '' } = {}) {
-  const WIDTH = P_W, HEIGHT = P_H;
-  const canvas = createCanvas(WIDTH, HEIGHT);
-  const g = canvas.getContext('2d');
-  g.fillStyle = COLORS.bg; g.fillRect(0, 0, WIDTH, HEIGHT);
-
-  // Header: step, then the item name on its own line (FaceTime's own buttons cover the very top).
-  g.textBaseline = 'top';
-  g.fillStyle = COLORS.dim; g.font = '600 28px sans-serif';
-  g.fillText(step && total ? `Check ${step} of ${total}` : 'ShowMe', M, 150);
-  if (title) {
-    g.fillStyle = COLORS.ink; g.font = '600 30px sans-serif';
-    g.fillText(wrapText(title, WIDTH - 2 * M, t => g.measureText(t).width)[0] ?? '', M, 192);
+/** A running Greek key (meander) band from x0 to x1, top edge at y, unit u. */
+function meander(g, x0, x1, y, u, color) {
+  g.save();
+  g.strokeStyle = color; g.lineWidth = Math.max(2, u * 0.6); g.lineJoin = 'miter'; g.lineCap = 'square';
+  g.beginPath();
+  g.moveTo(x0, y); g.lineTo(x1, y); g.moveTo(x0, y + u * 6); g.lineTo(x1, y + u * 6);
+  g.stroke();
+  const key = [[0, 5], [0, 1], [4, 1], [4, 4], [1.8, 4], [1.8, 2.6], [2.8, 2.6]];
+  for (let x = x0; x < x1; x += u * 5) {
+    g.beginPath();
+    key.forEach(([a, b], i) => (i ? g.lineTo : g.moveTo).call(g, x + a * u, y + (b + 0.5) * u));
+    g.stroke();
   }
-
-  // The challenge, big and centered vertically.
-  g.fillStyle = COLORS.ink; g.font = '700 52px sans-serif';
-  const lines = wrapText(prompt, WIDTH - 2 * M, t => g.measureText(t).width).slice(0, 8);
-  const lineH = 64, top = (HEIGHT - lines.length * lineH) / 2 - 40;
-  lines.forEach((l, i) => g.fillText(l, M, top + i * lineH));
-
-  // Status bar, above FaceTime's bottom controls.
-  const label = note || STATUS_TEXT[status] || '';
-  if (label) {
-    g.fillStyle = COLORS[status] || COLORS.info;
-    g.fillRect(0, HEIGHT - 330, WIDTH, 90);
-    g.fillStyle = '#ffffff'; g.font = '700 36px sans-serif'; g.textBaseline = 'middle';
-    g.fillText(label, M, HEIGHT - 285);
-  }
-
-  g.fillStyle = COLORS.dim; g.font = '500 22px sans-serif'; g.textBaseline = 'top';
-  g.fillText('ShowMe · live check', M, HEIGHT - 220);
-  return { canvas, label };
+  g.restore();
 }
 
 /**
  * Draws a card. `status` is one of info | waiting | checking | passed | failed | unverified.
  * Returns WIDTH × HEIGHT RGBA bytes.
  */
-export function renderCard(opts = {}) {
-  const status = opts.status || 'info';
-  const { canvas: portrait, label } = drawPortrait(opts);
+export function renderCard({ step, total, title = '', prompt = '', status = 'info', note = '' } = {}) {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const g = canvas.getContext('2d');
-  g.fillStyle = COLORS.bg; g.fillRect(0, 0, WIDTH, HEIGHT);
-  if (label) { // the status bar runs the full width, so fit mode reads as one card
-    g.fillStyle = COLORS[status] || COLORS.info;
-    g.fillRect(0, Math.round((P_H - 330) * SCALE), WIDTH, Math.round(90 * SCALE));
+  g.fillStyle = BG[status] || BG.info; g.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // Full width: the key band, and in fit mode the big step numerals either side of the column.
+  meander(g, 0, WIDTH, 55 * SCALE, 10 * SCALE, 'rgba(244,241,234,0.85)');
+  if (step && total) {
+    g.fillStyle = 'rgba(244,241,234,0.10)'; g.font = `520px ${DISPLAY}`; g.textBaseline = 'middle';
+    g.textAlign = 'right'; g.fillText(roman(step), COLUMN.x - 30, HEIGHT / 2 + 30);
+    g.textAlign = 'left'; g.fillText(roman(total), COLUMN.x + COLUMN.width + 30, HEIGHT / 2 + 30);
   }
-  g.drawImage(portrait, COLUMN.x, 0, COLUMN.width, HEIGHT);
+
+  // The column, in 540 × 1170 design units.
+  g.save(); g.translate(COLUMN.x, 0); g.scale(SCALE, SCALE);
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left'; g.fillStyle = MARBLE;
+  const measure = t => g.measureText(t).width, maxW = P_W - 2 * M;
+
+  g.globalAlpha = 0.8; g.font = `24px ${DISPLAY}`;
+  g.fillText(step && total ? `TRIAL ${roman(step)} · OF ${roman(total)}` : 'SHOWME · LIVE CHECK', M, 230);
+  if (title) { g.font = `italic 30px ${SERIF}`; g.fillText(wrapText(title, maxW, measure)[0] ?? '', M, 272); }
+  g.globalAlpha = 1;
+
+  const verdict = VERDICT[status];
+  if (verdict) {
+    g.font = `118px ${DISPLAY}`; g.fillText(verdict, M - 8, 630);
+    let y = 700;
+    if (note) { g.font = `30px ${DISPLAY}`; wrapText(note, maxW, measure).slice(0, 2).forEach(l => { g.fillText(l, M, y); y += 42; }); y += 8; }
+    g.globalAlpha = 0.85; g.font = `italic 32px ${SERIF}`;
+    wrapText(prompt, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 42; });
+    g.globalAlpha = 1;
+  } else {
+    g.font = `68px ${SERIF}`;
+    const lines = wrapText(prompt, maxW, measure).slice(0, 6), lh = 76;
+    const top = 580 - (lines.length * lh) / 2 + 40;
+    lines.forEach((l, i) => g.fillText(l, M - 2, top + i * lh));
+    const footer = note || FOOTER[status];
+    if (footer) { g.font = `24px ${DISPLAY}`; g.fillText(footer.toUpperCase(), M, 900); }
+  }
+  g.restore();
   return new Uint8Array(g.getImageData(0, 0, WIDTH, HEIGHT).data.buffer);
 }
 
-/** Copies a card and adds a small blinking dot (top right), so a frozen picture is easy to spot. */
+/** Copies a card and adds a small blinking dot (top right of the column), so a frozen picture is easy to spot. */
 export function withPulse(card, tick) {
   const out = new Uint8Array(card);
   const on = Math.floor(tick / (FPS / 2)) % 2 === 0;
-  const color = on ? [239, 68, 68] : [80, 30, 30];
-  const px0 = COLUMN.x + COLUMN.width - Math.round(M * SCALE), py0 = Math.round(156 * SCALE);
-  for (let y = py0; y < py0 + 12; y++) for (let x = px0 - 12; x < px0; x++) {
+  const color = on ? [244, 241, 234] : [120, 120, 130];
+  const px0 = COLUMN.x + COLUMN.width - Math.round(M * SCALE), py0 = Math.round(212 * SCALE);
+  for (let y = py0; y < py0 + 10; y++) for (let x = px0 - 10; x < px0; x++) {
     const i = (y * WIDTH + x) * 4;
     out[i] = color[0]; out[i + 1] = color[1]; out[i + 2] = color[2]; out[i + 3] = 255;
   }
