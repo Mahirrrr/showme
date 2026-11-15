@@ -24,8 +24,10 @@ const probeDir = fileURLToPath(new URL('./probe/', import.meta.url));
 
 async function saveProbe(buffer) {
   await mkdir(probeDir, { recursive: true });
-  for (let n = 1; n <= 3; n++) {
-    await new Promise(r => setTimeout(r, 1000));
+  // PROBE_SHOTS (default 3) shots, PROBE_EVERY_MS (default 1000) apart.
+  const shots = Number(process.env.PROBE_SHOTS) || 3, every = Number(process.env.PROBE_EVERY_MS) || 1000;
+  for (let n = 1; n <= shots; n++) {
+    await new Promise(r => setTimeout(r, every));
     const [frame] = buffer.recent(2000, 1).slice(-1);
     if (!frame) { console.log(`[probe] no frame for shot ${n}`); continue; }
     const file = `${probeDir}caller-${Date.now()}-${n}.jpg`;
@@ -42,18 +44,22 @@ const agent = defineAgent({
       onFirstFrame: () => { if (process.env.PROBE_FRAMES === '1') void saveProbe(buffer); },
     });
     await ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_ALL);
-    const caller = await ctx.waitForParticipant();
-    console.log(`[agent] caller joined: ${caller.identity}`);
 
     // Our own video: the current card, re-sent at FPS with a blinking dot.
+    // Published before the caller joins, so FaceTime shows the card the moment its video starts.
     const source = new VideoSource(WIDTH, HEIGHT);
     const track = LocalVideoTrack.createVideoTrack('agent-video', source);
-    let card = renderCard({ prompt: 'Connecting…', status: 'info' }), tick = 0;
+    let card = renderCard({ prompt: 'Flip to your back camera and show the item', status: 'info' }), tick = 0;
     const show = c => { card = renderCard(c); };
     const sendFrame = () => source.captureFrame(new VideoFrame(withPulse(card, tick++), WIDTH, HEIGHT, VideoBufferType.RGBA));
     sendFrame();
     await ctx.room.localParticipant.publishTrack(track, { source: TrackSource.SOURCE_CAMERA });
     const timer = setInterval(sendFrame, 1000 / FPS);
+
+    let caller;
+    try { caller = await ctx.waitForParticipant(); }
+    catch (error) { clearInterval(timer); stopVideo(); await track.close(); await source.close(); throw error; }
+    console.log(`[agent] caller joined: ${caller.identity}`);
 
     // Voice: speech-to-text to hear the code, text-to-speech for scripted lines. No LLM, so it never improvises.
     // Gemini hears, ElevenLabs speaks (Gemini TTS free tier is only 10 requests a day).

@@ -21,8 +21,8 @@ export async function runCall(deps, limits = LIMITS) {
   const state = { request: null, results: [], finished: false };
 
   // 1. Greet and link the call to a request.
-  show({ prompt: 'Hi! Say the 4-digit code from the ShowMe link.', status: 'info' });
-  await say("Hi, I'm ShowMe, an AI that runs a live check for the buyer. What's the 4-digit code on your link?");
+  show({ prompt: 'Flip to your back camera, then say the 4-digit code from the link', status: 'info' });
+  await say("Hi, I'm ShowMe, an AI that runs a live check for the buyer. Please flip to your back camera. What's the 4-digit code on your link?");
   let code = await listenForCode(limits.codeListenMs);
   let request = code ? await vision.byCode(code) : null;
   if (!request) {
