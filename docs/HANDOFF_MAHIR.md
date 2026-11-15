@@ -66,6 +66,14 @@ Read this after `showme/CLAUDE.md`. It says where the `agent/` work stands, what
    - Use it in `grabFrames`, and also save the cropped version under `SAVE_FRAMES`.
    - Test it on the frames in `agent/probe/for-youngjun/`.
    - Tell Youngjun to leave `VISION_CROP_BOX` empty.
+1b. **Status at 7:50 PM:**
+   - `main` = Merge 1 (`2f2d00b`: web + vision + agent); `dev` has the agent too (`32075d0`).
+   - Youngjun pushed `6bbe73e` (vision-side FaceTime crop + masks, calibrated on old 640x360 frames). It is **not** MongoDB. Its default `VISION_FRAME_MODE=facetime` would reject the agent's 480x520 cropped frames, so `../showme-vision/vision/.env` now sets `VISION_FRAME_MODE=camera` and an empty `VISION_CROP_BOX`. Youngjun should make that the default for Plan A.
+   - `../showme-vision` is checked out at `6bbe73e`; uvicorn restarted; 53 vision tests pass. Smoke test (real cropped frames, 2 per check, mock checker) returns `passed`.
+   - Vision now requires 2 to 4 frames per check (422 otherwise). Agent fix `8c84ddd`: fewer than 2 frames counts as no frames. 30 agent tests pass.
+   - Agent restarted 7:47 PM (`MOCK_VISION=1 SAVE_FRAMES=1`). `chert dev` could NOT restart: the line is `line_offline` (Chert's Mac not accepting). Get it fixed at the Chert table, then run `nohup npx -y @trychert/facetime@0.1.0-beta.21 dev >> logs/chert-dev.log 2>&1 &` in `agent/`.
+   - `MONGODB_URI` and `GEMINI_API_KEY` are still empty in `../showme-vision/vision/.env`.
+   - FaceTime minutes: 41 left at 7:30 PM.
 2. **Real Gemini judging:** get Youngjun's `MONGODB_URI` (by DM), set `MOCK=0` and `GEMINI_API_KEY` in `../showme-vision/vision/.env`, restart uvicorn, and run the agent with `MOCK_VISION=0`. Wrong answers must come back `failed` or `unverified`.
 3. **Merge 1 at 8 PM:** end to end in a plain LiveKit room. Webcam, agent, real `vision/`, and `/v/<token>` updating live. Then merge the branches into `main` (Mahir's job).
 4. **Devpost draft by 10:30 PM** (hard cutoff 11:59 PM Saturday).
