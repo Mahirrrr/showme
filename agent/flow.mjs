@@ -16,10 +16,18 @@ export const LIMITS = {
 
 const say1 = (text) => text.replace(/\s+/g, ' ').trim();
 
+// Rough stage of a test from its wording, for tests Gemini wrote (not in the catalog):
+// 0 = turn it on, 1 = on-screen info (Settings, About, battery, IMEI…), 2 = physical (ports, sides, scratches).
+const STAGES = [
+  /\b(turn (it )?on|power(ed)? on|wake|lock screen|boot|start(s)? up)\b/i,
+  /settings|about|battery|imei|\*#06#|serial|model|storage|account|apple id|signed (in|out)|launch|game|menu|screen shows/i,
+];
+const stageOf = prompt => { const i = STAGES.findIndex(re => re.test(prompt)); return i < 0 ? STAGES.length : i; };
+
 /**
- * Logical order: the buyer's tests in catalog order (shared/tests.json lists them so that each step
- * leads into the next, e.g. power on before Settings screens), then a custom test, then the secret
- * liveness challenges. Vision returns them shuffled. Stable for anything not in the catalog.
+ * Logical order: the buyer's tests go power on, then on-screen info, then physical checks (catalog order
+ * breaks ties, since shared/tests.json lists them so each step leads into the next), then a custom test,
+ * then the secret liveness challenges. Vision returns them shuffled. Stable otherwise.
  */
 export function orderChallenges(challenges, catalog = {}) {
   const rankOf = new Map();
@@ -28,6 +36,7 @@ export function orderChallenges(challenges, catalog = {}) {
   return challenges
     .map((c, i) => ({ c, i }))
     .sort((a, b) => group(a.c) - group(b.c)
+      || stageOf(a.c.prompt) - stageOf(b.c.prompt)
       || (rankOf.get(a.c.prompt) ?? 99) - (rankOf.get(b.c.prompt) ?? 99)
       || a.i - b.i)
     .map(x => x.c);

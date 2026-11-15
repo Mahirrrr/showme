@@ -294,6 +294,16 @@ test('orderChallenges: buyer tests follow the catalog, custom next, secret liven
   assert.deepEqual(orderChallenges([], catalog), []);
   assert.deepEqual(orderChallenges(shuffled.slice(0, 2), undefined).map(c => c.id), ['b', 'a']); // no catalog: buyer first, still stable
 });
+test('orderChallenges: Gemini-picked tests (not in the catalog) still go power on, then Settings, then physical', () => {
+  const shuffled = [
+    { id: 'a', kind: 'buyer', prompt: 'Show the charging port up close' },
+    { id: 'b', kind: 'liveness', prompt: 'Tap it twice' },
+    { id: 'c', kind: 'buyer', prompt: 'Open Settings > General > About and show the serial number' },
+    { id: 'd', kind: 'buyer', prompt: 'Wake the phone and show the lock screen' },
+    { id: 'e', kind: 'buyer', prompt: 'Show the battery health percentage in Settings' },
+  ];
+  assert.deepEqual(orderChallenges(shuffled, catalog).map(c => c.id), ['d', 'c', 'e', 'a', 'b']);
+});
 test('hintFor: short on-screen guidance from the verdict', () => {
   assert.match(hintFor({ result: 'unverified', reason: 'No serial number or model label is visible.' }), /^Not clear yet: No serial number/);
   assert.match(hintFor({ result: 'failed', reason: 'The hand is not on top of the item.' }), /^Not yet: The hand/);
