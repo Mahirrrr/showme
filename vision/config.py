@@ -26,6 +26,8 @@ class Settings:
     public_base_url: str = 'http://localhost:5173'
     line_number: str = ''
     gemini_model: str = 'gemini-3.1-flash-lite'
+    # Naming and test suggestions: steady ~1.5 s (3.1-flash-lite swings 1-40 s and 503s under load).
+    fast_gemini_model: str = 'gemini-3.5-flash'
     check_timeout: float = 20.0
     crop_box: tuple | None = None
     mock_result: str = 'passed'
@@ -50,6 +52,7 @@ class Settings:
                    mongodb_database=os.getenv('MONGODB_DATABASE', 'showme'),
                    public_base_url=os.getenv('PUBLIC_BASE_URL', 'http://localhost:5173').rstrip('/'),
                    line_number=os.getenv('LINE_NUMBER', ''), gemini_model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+                   fast_gemini_model=os.getenv('FAST_GEMINI_MODEL', 'gemini-3.5-flash'),
                    check_timeout=float(os.getenv('CHECK_TIMEOUT_SECONDS', '20')),
                    crop_box=coordinates(box) if box else None,
                    mock_result=os.getenv('MOCK_RESULT', 'passed'),

@@ -13,6 +13,7 @@ from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field
 
 from .catalog import CATALOG
+from .hedge import note_failure, pick_model
 
 CATEGORIES = ('console', 'phone', 'laptop', 'other')
 MAX_TESTS = 6
@@ -134,18 +135,26 @@ def clean(raw, body, count):
 class GeminiSuggester:
     def __init__(self, settings, client=None):
         self.model = settings.gemini_model
+        self.models = (getattr(settings, 'fast_gemini_model', None) or self.model, self.model)
         self.client = client or genai.Client(api_key=settings.gemini_api_key,
             http_options=types.HttpOptions(timeout=15_000, retry_options=types.HttpRetryOptions(attempts=1)))
 
-    async def suggest(self, body):
+    async def suggest(self, body, attempt=0):
         """Raises on any provider/shape problem; the route turns that into the catalog fallback."""
         count = wanted(body)
-        response = await self.client.aio.models.generate_content(
-            model=self.model,
-            contents=build_prompt(body, count),
-            config=types.GenerateContentConfig(response_mime_type='application/json',
-                                               response_json_schema=schema(count),
-                                               temperature=0.7 if (body.keep or body.exclude) else 0.4))
+        # Tries alternate fast model / main model; a rate-limited one sits out for a minute.
+        model = pick_model(self.models, attempt)
+        thinking = {'thinking_config': types.ThinkingConfig(thinking_level='minimal')} if model != self.model else {}
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=model,
+                contents=build_prompt(body, count),
+                config=types.GenerateContentConfig(response_mime_type='application/json',
+                                                   response_json_schema=schema(count),
+                                                   temperature=0.7 if (body.keep or body.exclude) else 0.4, **thinking))
+        except Exception as err:
+            note_failure(model, err)
+            raise
         category, tests = clean(json.loads(response.text or '{}'), body, count)
         return {'category': category, 'tests': tests, 'source': 'gemini'}
 
