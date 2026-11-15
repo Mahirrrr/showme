@@ -414,7 +414,7 @@ test('flow: initially failed test ends passed and mock report counts only the fi
   assert.equal(state.results[0].result, 'passed');
   assert.equal(state.results[0].attempts, 2);
   const report = await h.vision.finish(state.request.request_id);
-  assert.deepEqual(report.summary, { passed: 3, failed: 0, unverified: 0, total: 3, liveness: 'not_run', passed_tests: 3, total_selected_tests: 3, pass_percentage: 100, passing_threshold_percent: 75, overall_verdict: 'passed' });
+  assert.deepEqual(report.summary, { passed: 3, failed: 0, unverified: 0, total: 3, liveness: 'not_run', passed_tests: 3, total_selected_tests: 3, pass_percentage: 100, passing_threshold_percent: 60, overall_verdict: 'passed' });
   assert.ok(h.shown.some(c => c.prompt.startsWith('Overall PASSED.')));
 });
 
@@ -473,7 +473,7 @@ test('combined: ready/again/skip coexist with hints, retry limits and authoritat
   const done = await h.vision.finish(state.request.request_id);
   assert.equal(done.summary.passed_tests, 2);
   assert.equal(done.summary.total_selected_tests, 3);
-  assert.equal(done.summary.overall_verdict, 'failed');
+  assert.equal(done.summary.overall_verdict, 'passed'); // 2 of 3 = 66.7% meets the 60% mark
 });
 
 test('combined: again during camera recovery repeats the instruction without consuming an attempt', async () => {

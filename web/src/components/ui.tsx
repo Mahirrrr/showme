@@ -6,11 +6,14 @@ export function Page({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-lg px-4 pb-12">
-        <header className="flex h-14 items-center">
-          <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <Logo />
-            ShowMe
-          </Link>
+        <header className="pt-3">
+          <div className="flex h-12 items-center">
+            <Link to="/" className="flex items-center gap-2 font-display text-lg tracking-[0.18em] uppercase">
+              <Logo />
+              ShowMe
+            </Link>
+          </div>
+          <div aria-hidden className="meander mb-2" />
         </header>
         {children}
       </div>
