@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCode, makeCodeListener } from '../code.mjs';
-import { renderCard, withPulse, wrapText, WIDTH, HEIGHT } from '../card.mjs';
+import { renderCard, withPulse, wrapText, WIDTH, HEIGHT, COLUMN } from '../card.mjs';
 import { FrameBuffer, toJpegBase64 } from '../frames.mjs';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
 import { runCall, LIMITS } from '../flow.mjs';
@@ -58,9 +58,18 @@ test('renderCard returns a full RGBA frame for every status', () => {
     assert.equal(px.length, WIDTH * HEIGHT * 4);
   }
 });
-test('cards are portrait, phone-shaped (FaceTime on iPhone crops landscape)', () => {
-  assert.ok(HEIGHT > WIDTH * 2, `${WIDTH}x${HEIGHT} is not tall enough`);
+test('cards fit FaceTime both ways: 3:2 frame, text in a phone-shaped center column', () => {
+  assert.equal(WIDTH / HEIGHT, 1.5); // FaceTime's video on the Mac is 3:2
   assert.equal(WIDTH % 2, 0); assert.equal(HEIGHT % 2, 0); // even sizes for the video encoder
+  // Fill mode on an iPhone (9:19.5) shows only the center column, so it must be phone-shaped and centered.
+  assert.ok(Math.abs(COLUMN.width / HEIGHT - 9 / 19.5) < 0.01, `column ${COLUMN.width} is not phone-shaped`);
+  assert.equal(COLUMN.x * 2 + COLUMN.width, WIDTH);
+});
+test('fit mode has no black side bars: the wings are painted', () => {
+  const px = renderCard({ prompt: 'x', status: 'waiting' });
+  const at = (x, y) => px.slice((y * WIDTH + x) * 4, (y * WIDTH + x) * 4 + 3);
+  assert.notDeepEqual([...at(5, 5)], [0, 0, 0]);
+  assert.notDeepEqual([...at(WIDTH - 5, HEIGHT - 5)], [0, 0, 0]);
 });
 test('renderCard survives empty and very long prompts', () => {
   assert.equal(renderCard().length, WIDTH * HEIGHT * 4);

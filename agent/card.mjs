@@ -1,10 +1,16 @@
 // The agent's own video: one challenge card per state, rendered to RGBA for LiveKit's VideoSource.
 import { createCanvas } from '@napi-rs/canvas';
 
-// Portrait, about iPhone-shaped (9:19.5): FaceTime fills the phone screen, so a landscape card loses its sides.
-export const WIDTH = 540;
-export const HEIGHT = 1170;
-const M = 56; // side margin, wide enough to survive a small crop
+// FaceTime's video on the Mac is 3:2. An iPhone in fill mode shows only a phone-shaped (9:19.5)
+// center column of it; in fit mode it shows the whole frame. So the text lives in that column,
+// drawn as a portrait card, and the background and status bar stretch across the full width.
+export const WIDTH = 1440;
+export const HEIGHT = 960;
+const P_W = 540, P_H = 1170; // the portrait card's own design size
+const COLUMN_W = Math.round(HEIGHT * P_W / P_H / 2) * 2; // 444: even, about 9:19.5
+export const COLUMN = { x: (WIDTH - COLUMN_W) / 2, width: COLUMN_W };
+const SCALE = HEIGHT / P_H;
+const M = 56; // side margin inside the portrait card
 export const FPS = 10;
 
 const COLORS = {
@@ -29,11 +35,8 @@ export function wrapText(text, maxWidth, measure) {
   return lines;
 }
 
-/**
- * Draws a card. `status` is one of info | waiting | checking | passed | failed | unverified.
- * Returns WIDTH × HEIGHT RGBA bytes.
- */
-export function renderCard({ step, total, title = '', prompt = '', status = 'info', note = '' } = {}) {
+function drawPortrait({ step, total, title = '', prompt = '', status = 'info', note = '' } = {}) {
+  const WIDTH = P_W, HEIGHT = P_H;
   const canvas = createCanvas(WIDTH, HEIGHT);
   const g = canvas.getContext('2d');
   g.fillStyle = COLORS.bg; g.fillRect(0, 0, WIDTH, HEIGHT);
@@ -64,6 +67,24 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
 
   g.fillStyle = COLORS.dim; g.font = '500 22px sans-serif'; g.textBaseline = 'top';
   g.fillText('ShowMe · live check', M, HEIGHT - 220);
+  return { canvas, label };
+}
+
+/**
+ * Draws a card. `status` is one of info | waiting | checking | passed | failed | unverified.
+ * Returns WIDTH × HEIGHT RGBA bytes.
+ */
+export function renderCard(opts = {}) {
+  const status = opts.status || 'info';
+  const { canvas: portrait, label } = drawPortrait(opts);
+  const canvas = createCanvas(WIDTH, HEIGHT);
+  const g = canvas.getContext('2d');
+  g.fillStyle = COLORS.bg; g.fillRect(0, 0, WIDTH, HEIGHT);
+  if (label) { // the status bar runs the full width, so fit mode reads as one card
+    g.fillStyle = COLORS[status] || COLORS.info;
+    g.fillRect(0, Math.round((P_H - 330) * SCALE), WIDTH, Math.round(90 * SCALE));
+  }
+  g.drawImage(portrait, COLUMN.x, 0, COLUMN.width, HEIGHT);
   return new Uint8Array(g.getImageData(0, 0, WIDTH, HEIGHT).data.buffer);
 }
 
@@ -72,7 +93,8 @@ export function withPulse(card, tick) {
   const out = new Uint8Array(card);
   const on = Math.floor(tick / (FPS / 2)) % 2 === 0;
   const color = on ? [239, 68, 68] : [80, 30, 30];
-  for (let y = 156; y < 172; y++) for (let x = WIDTH - M - 16; x < WIDTH - M; x++) {
+  const px0 = COLUMN.x + COLUMN.width - Math.round(M * SCALE), py0 = Math.round(156 * SCALE);
+  for (let y = py0; y < py0 + 12; y++) for (let x = px0 - 12; x < px0; x++) {
     const i = (y * WIDTH + x) * 4;
     out[i] = color[0]; out[i + 1] = color[1]; out[i + 2] = color[2]; out[i + 3] = 255;
   }
