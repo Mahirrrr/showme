@@ -239,3 +239,50 @@ def test_not_for_sale_screenshot_and_text(body):
 def test_gemini_down_still_falls_back_to_title():
     out = run({'url': FB}, FakeNamer(fail=True), fetch=page('PlayStation 5 Slim'))
     assert out['item_name'] == 'PlayStation 5 Slim'
+
+
+# --- photos of the item, not only listing screenshots ------------------------
+
+class _FakeModels:
+    def __init__(self):
+        self.contents = None
+
+    async def generate_content(self, *, model, contents, config):
+        self.contents = contents
+
+        class R:
+            text = '{"kind": "item", "item_name": "Nintendo Switch OLED", "category": "console"}'
+        return R()
+
+
+class _FakeClient:
+    def __init__(self):
+        self.aio = type('Aio', (), {})()
+        self.aio.models = _FakeModels()
+
+
+def test_image_prompt_accepts_a_photo_of_the_item():
+    from vision.listing import GeminiNamer
+    client = _FakeClient()
+    out = asyncio.run(GeminiNamer(client, 'm').name(image='data:image/jpeg;base64,/9j/4AAQ'))
+    prompt = client.aio.models.contents[1]
+    assert 'photo of the item' in prompt and 'screenshot' in prompt
+    assert out == {'item_name': 'Nintendo Switch OLED', 'category': 'console'}
+
+
+def test_heic_photo_is_accepted():
+    from vision.listing import GeminiNamer
+    client = _FakeClient()
+    asyncio.run(GeminiNamer(client, 'm').name(image='data:image/heic;base64,AAAA'))
+    assert client.aio.models.contents[0].inline_data.mime_type == 'image/heic'
+
+
+def test_photo_gets_longer_than_a_title(monkeypatch):
+    monkeypatch.setattr('vision.listing.NAME_SECONDS', 0.05)
+
+    class Slow:
+        async def name(self, **kw):
+            await asyncio.sleep(0.2)
+            return {'item_name': 'Canon EOS R6', 'category': 'other'}
+    out = run({'image': 'data:image/jpeg;base64,/9j/4AAQ'}, Slow())
+    assert out['item_name'] == 'Canon EOS R6'

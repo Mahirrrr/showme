@@ -26,6 +26,7 @@ from .config import ROOT, Settings
 from .store import Conflict, MemoryStore, MongoStore
 from .scoring import scored_summary
 from .listing import GeminiNamer, ListingRequest, parse_listing
+from .hedge import hedged
 from .suggest import GeminiSuggester, SuggestRequest, TestSpec, catalog_fallback, slug
 from .thumbs import UnusableEvidence, prepare_frames, thumbnail
 
@@ -129,7 +130,7 @@ def create_app(settings=None, store=None, checker=None, suggester=None, namer=No
         app.state.suggester = suggester if suggester is not None else (GeminiSuggester(settings) if settings.gemini_api_key else None)
         # Listing names reuse the suggester's Gemini client (same key, no frames, no DB).
         own_client = getattr(app.state.suggester, 'client', None)
-        app.state.namer = namer if namer is not None else (GeminiNamer(own_client, settings.gemini_model) if own_client else None)
+        app.state.namer = namer if namer is not None else (GeminiNamer(own_client, settings.gemini_model, settings.fast_gemini_model) if own_client else None)
         app.state.settings = settings
         if settings.mock and store is None:
             seed_mock(app.state.store)
@@ -234,9 +235,13 @@ def create_app(settings=None, store=None, checker=None, suggester=None, namer=No
             raise HTTPException(422, 'Already 6 tests kept')
         if app.state.suggester is None:
             return catalog_fallback(body)
+        # Gemini swings 2-15 s on this prompt and sometimes 504s: a second try starts after 4 s (or
+        # at once on failure) and the first answer wins, so a sweater doesn't get handed "Power on".
         try:
-            return await asyncio.wait_for(app.state.suggester.suggest(body), timeout=20)
-        except Exception:
+            return await hedged(lambda i: app.state.suggester.suggest(body, attempt=i), hedge_after=3, total=18,
+                                tries=3, label='tests/suggest')
+        except Exception as err:
+            print(f'tests/suggest fell back to catalog: {type(err).__name__}', file=sys.stderr)
             return catalog_fallback(body)
 
     @app.post('/api/listing/parse')

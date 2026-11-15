@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { createRequest, parseListing, suggestTests, type CreateResult, type ListingResult } from '../api'
 import { guessCategory } from '../lib/catalog'
 import { CATEGORY_LABEL } from '../lib/format'
-import { findUrl, imageToDataUrl } from '../lib/listing'
+import { findUrl, imageToDataUrl, isImageFile } from '../lib/listing'
 import type { Category, SuggestResponse } from '../types'
 import { buttonPrimary, buttonSecondary, Card, Page } from '../components/ui'
 
@@ -69,13 +69,13 @@ export default function NewCheck() {
       setListingNote({
         ok: false,
         text: from === 'link'
-          ? `Couldn't read that ${res.site ?? 'link'} listing. Tap the picture icon to add a screenshot, or type the item below.`
-          : "Couldn't read that screenshot. Type what you're buying below.",
+          ? `Couldn't read that ${res.site ?? 'link'} listing. Tap the picture icon to add a screenshot or photo, or type the item below.`
+          : "Couldn't make out the item in that picture. Try a clearer photo or screenshot, or type it below.",
       })
       return
     }
     setAskShot(false)
-    setListingNote({ ok: true, text: `Found on ${res.site ?? (from === 'screenshot' ? 'your screenshot' : 'the listing')}` })
+    setListingNote({ ok: true, text: `Found on ${res.site ?? (from === 'screenshot' ? 'your picture' : 'the listing')}` })
     setItemName(res.item_name)
     void suggest(undefined, res.item_name.trim(), res.category)
   }
@@ -97,8 +97,12 @@ export default function NewCheck() {
     applyListing(res, 'link')
   }
 
-  const readShot = async (file: Blob | null | undefined) => {
-    if (!file || !file.type.startsWith('image/')) return
+  const readShot = async (file: File | null | undefined) => {
+    if (!file) return
+    if (!isImageFile(file)) {
+      setListingNote({ ok: false, text: 'That file isn’t a picture. Pick a screenshot or a photo.' })
+      return
+    }
     const call = ++latestListing.current
     setReading(true)
     setListingNote(null)
@@ -114,7 +118,7 @@ export default function NewCheck() {
   }
 
   const onLinkPaste = (e: ClipboardEvent<HTMLInputElement>) => {
-    const image = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'))
+    const image = [...e.clipboardData.files].find(isImageFile)
     if (image) {
       e.preventDefault()
       void readShot(image)
@@ -145,7 +149,7 @@ export default function NewCheck() {
     if (findUrl(listingUrl) && findUrl(listingUrl) !== lastRead.current) void readLink(listingUrl)
   }
   const onLinkDrop = (e: DragEvent<HTMLInputElement>) => {
-    const image = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
+    const image = [...e.dataTransfer.files].find(isImageFile)
     if (!image) return
     e.preventDefault()
     void readShot(image)
@@ -292,10 +296,10 @@ export default function NewCheck() {
           />
           <label
             className={`absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center rounded-r-xl transition-colors hover:text-ink ${askShot ? 'text-accent' : 'text-faint'} ${reading ? 'pointer-events-none' : ''}`}
-            title="Use a screenshot of the listing"
+            title="Use a screenshot or photo"
           >
             <input type="file" accept="image/*" className="sr-only" onChange={onShotPick} disabled={reading} />
-            <span className="sr-only">Use a screenshot of the listing</span>
+            <span className="sr-only">Use a screenshot or photo</span>
             {reading ? (
               <span className="size-5 animate-spin rounded-full border-2 border-line border-t-ink" aria-hidden />
             ) : (
@@ -312,7 +316,7 @@ export default function NewCheck() {
             ? 'Reading the listing…'
             : listingNote
               ? (listingNote.ok ? '✓ ' : '') + listingNote.text
-              : 'Paste a link, or tap the picture icon to use a screenshot.'}
+              : 'Paste a link, or tap the picture icon for a screenshot or photo.'}
         </p>
       </div>
 
