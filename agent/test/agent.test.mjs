@@ -5,6 +5,7 @@ import { renderCard, cardCopy, withPulse, wrapText, WIDTH, HEIGHT, COLUMN } from
 import { FrameBuffer, toJpegBase64, findCallerStrip, cropToCallerVideo, makeCallerEncoder } from '../frames.mjs';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { makeMockVision, makeHttpVision, VisionError } from '../vision.mjs';
+import { callIdFromIdentity, makeCallEnder } from '../hangup.mjs';
 import { runCall, LIMITS, orderChallenges, hintFor, completionFor } from '../flow.mjs';
 import catalog from '../../shared/tests.json' with { type: 'json' };
 
@@ -525,4 +526,32 @@ test('hint-first cards retain the task, command footer, simple copy and a separa
   assert.equal(cardCopy({ ...args, note: '' }).primary, args.prompt);
   assert.equal(cardCopy({ ...args, status: 'passed' }).primary, 'Passed');
   for (const status of ['waiting', 'checking', 'failed', 'unverified']) assert.equal(renderCard({ ...args, status }).length, WIDTH * HEIGHT * 4);
+});
+
+// ---------- hang up when the check is done (FaceTime stays open otherwise)
+test('callIdFromIdentity: the Chert bridge identity carries the call id', () => {
+  assert.equal(callIdFromIdentity('chert-bridge-23e361a5-d3e2-4b4b-a327-add7606955c7'), '23e361a5-d3e2-4b4b-a327-add7606955c7');
+  assert.equal(callIdFromIdentity('webcam-user'), null); // plain LiveKit room: nothing to hang up
+  assert.equal(callIdFromIdentity(undefined), null);
+});
+test('makeCallEnder: ends the call with the project key, project id and an idempotency key', async () => {
+  const seen = [];
+  const end = makeCallEnder({ apiKey: 'ftk_x', projectId: 'p1', fetchImpl: async (url, opts) => { seen.push({ url, opts }); return new Response('{}', { status: 200 }); } });
+  assert.equal(await end('c1'), 'ended');
+  assert.equal(seen[0].url, 'https://facetime.trychert.com/api/v1/calls/c1/end');
+  assert.equal(seen[0].opts.method, 'POST');
+  assert.equal(seen[0].opts.headers.authorization, 'Bearer ftk_x');
+  assert.equal(seen[0].opts.headers['x-chert-project-id'], 'p1');
+  assert.ok(seen[0].opts.headers['idempotency-key'].length >= 8);
+});
+test('makeCallEnder: an already-ended call is fine, errors never throw, no key means no call', async () => {
+  const status = code => makeCallEnder({ apiKey: 'k', projectId: 'p', fetchImpl: async () => new Response('{}', { status: code }) });
+  assert.equal(await status(409)('c1'), 'already ended');
+  assert.equal(await status(404)('c1'), 'already ended');
+  assert.equal(await status(500)('c1'), 'failed');
+  assert.equal(await makeCallEnder({ apiKey: 'k', projectId: 'p', fetchImpl: async () => { throw new Error('offline'); } })('c1'), 'failed');
+  let called = false;
+  assert.equal(await makeCallEnder({ apiKey: '', projectId: 'p', fetchImpl: async () => { called = true; } })('c1'), 'skipped');
+  assert.equal(await makeCallEnder({ apiKey: 'k', projectId: 'p' })(null), 'skipped');
+  assert.equal(called, false);
 });

@@ -16,6 +16,7 @@ import { LocalVideoTrack, TrackSource, VideoBufferType, VideoFrame, VideoSource 
 import { FPS, HEIGHT, WIDTH, renderCard, withPulse } from './card.mjs';
 import { runAgent } from './chert-rooms.mjs';
 import { makeCodeListener, parseCode, makeCommandListener, parseCommand } from './code.mjs';
+import { callIdFromIdentity, makeCallEnder } from './hangup.mjs';
 import { runCall } from './flow.mjs';
 import { FrameBuffer, attachCallerVideo, toJpegBase64, makeCallerEncoder } from './frames.mjs';
 import catalog from '../shared/tests.json' with { type: 'json' }; // test order for the call (flow.orderChallenges)
@@ -154,6 +155,13 @@ const agent = defineAgent({
         const result = await runCall({ ...deps, vision: { ...vision, start: async id => { live.request = { request_id: id }; return vision.start(id); }, finish: async id => { const r = await vision.finish(id); live.finished = true; return r; } } });
         Object.assign(live, result);
       } catch (error) { console.error('[agent] call flow failed', error); }
+      // Hang up after the goodbye has played, so the seller isn't left on an open FaceTime. AUTO_HANGUP=0 turns it off.
+      const callId = callIdFromIdentity(caller.identity);
+      if (callId && process.env.AUTO_HANGUP !== '0') {
+        await new Promise(r => setTimeout(r, 1500));
+        const ended = await makeCallEnder({ apiKey: process.env.CHERT_API_KEY, projectId: process.env.CHERT_PROJECT_ID })(callId);
+        console.log(`[agent] hang up: ${ended}`);
+      }
       ctx.shutdown('check finished');
     };
     // FaceTime: greet within 10 s of bridge_ready. Plain LiveKit room: start right away.
