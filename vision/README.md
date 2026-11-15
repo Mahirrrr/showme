@@ -88,7 +88,19 @@ Live mode fails startup if required credentials are missing or Atlas cannot conn
 
 Only a selected JPEG thumbnail (at most 400 pixels wide) is persisted per evaluated challenge; retries replace that thumbnail. Source frames are held only during processing. Requests have a 12 MB body limit, 2 MB encoded-frame limit (approximately), 16-million-pixel decode limit, and 2–4-frame bound. Images are normalized to at most 640×640 at JPEG quality 70 before evaluation. Gemini uses schema-constrained output, a twenty-second default deadline, and no SDK retry expansion. The agent manages retries. Passes below 0.7 confidence are downgraded to `unverified`.
 
-Plan A FaceTime privacy filtering is enabled by default when loading environment settings. Calibration on two locally supplied agent-captured samples found **640×360** screenshots with centered portrait caller video at approximately x=200..440, not the earlier approximate 1280×720 layout. The local `.env`, `.env.example`, and sanitizer defaults now use:
+Mahir's FaceTime agent now removes the window margins, top bar, self-view and controls **before sending JPEGs to vision**, producing approximately 480×520 caller images. Camera mode is therefore the default in `Settings`, environment loading, the local `.env`, and `.env.example`:
+
+```dotenv
+VISION_FRAME_MODE=camera
+VISION_CROP_BOX=
+VISION_MASK_BOXES=
+```
+
+With these settings the backend accepts 480×520 agent-cropped images **without additional cropping or masking**, retaining their full field of view. Camera mode also accepts raw webcam frames; `VISION_FRAME_SIZE` does not restrict this mode. The existing normalization still strips metadata and re-encodes JPEGs; images larger than 640×640 are reduced proportionally. Both Gemini and thumbnails receive only this normalized output. Thumbnails remain at most 400 pixels wide. Original input frames are neither saved nor logged. The agent is responsible for privacy cropping before sending its frames; do not send unprocessed FaceTime window screenshots in camera mode.
+
+Restart Uvicorn after dotenv changes. Existing `.env` files containing the previous crop/mask values must clear **both** settings when enabling camera mode, otherwise those explicit settings still apply. Environment variables override dotenv files, and the root `.env` takes priority over `vision/.env`; check the effective settings if frames appear unexpectedly cropped.
+
+For **uncropped FaceTime screenshots only**, explicit `facetime` mode retains the calibrated privacy sanitizer:
 
 ```dotenv
 VISION_FRAME_MODE=facetime
@@ -97,15 +109,11 @@ VISION_CROP_BOX=204,28,436,352
 VISION_MASK_BOXES=204,288,304,352
 ```
 
-All boxes are `left,top,right,bottom` in **original source pixels**, with exclusive right/bottom edges. Multiple masks are separated by semicolons. The crop retains a 232×324 caller region, excludes the black side margins, removes the top overlay (including a safety buffer), and trims the bottom rounded edge. A single buffered 100×64 source-pixel mask removes the bottom-left self-view tile. The lower-right caller evidence stays visible: the previous full-width bottom mask has been removed. No FaceTime controls remain inside this crop in either calibration sample.
+This optional preset was calibrated on two local 640×360 screenshots with centered portrait caller video at approximately x=200..440. It produces 232×324 images, cuts side margins and the top overlay, and masks only the bottom-left self-view while retaining lower-right evidence. It must not be applied to images the agent has already cropped. No automatic screenshot detection or scaling is attempted.
 
-Masks are applied before cropping and before any resize. No automatic scaling is applied: an unexpected frame size is unusable rather than risking a shifted UI. In particular, a future 1280×720 capture will be rejected until its layout is inspected and configured; it must not be assumed to match the previous approximation or a simple scale of this portrait layout.
+All boxes are `left,top,right,bottom` in original source pixels, with exclusive right/bottom edges. Masks are semicolon-separated and applied before cropping/resizing. A changed screenshot size/layout requires recalibration; fixed coordinates do not detect new/moving overlays. In `facetime` mode unexpected dimensions, invalid crop/mask regions, or insufficient visible area return `unverified` without calling Gemini or saving a thumbnail. Invalid JPEG/base64 input remains HTTP 422. These privacy tests and explicit-mode protections remain in place even though the main integration now defaults to camera mode.
 
-To tune, keep `VISION_FRAME_SIZE` aligned with Mahir's capture, set the crop to caller video, and use masks to cover every overlay left inside it, with a safety margin. Restart Uvicorn after dotenv changes. Custom settings replace defaults, so visually validate sanitized local previews after changing capture dimensions, window layout, or overlay positions. A fixed crop does not detect moving/new UI. The originals in `vision/local_samples/` are used only for local calibration and are ignored by Git; sanitized previews (`sanitized1.jpg`, `sanitized2.jpg`) and thumbnails (`thumb1.jpg`, `thumb2.jpg`) are also local and ignored. No original images were submitted to Gemini during calibration.
-
-Only sanitized, metadata-free JPEGs reach Gemini and the thumbnail generator. A batch containing an unexpected size, invalid crop/mask, or less than 10%/1,024 pixels of visible evidence is not sent to the checker: the attempt is persisted as `unverified` with an empty thumbnail. There is no fallback to an uncropped frame. Invalid JPEG/base64 payloads remain HTTP 422 input errors. Original frames are neither written nor logged. Black masking does not prove that the remaining item evidence is usable; Gemini still returns `unverified` when it cannot see the requirement.
-
-For **raw camera frames only**, explicitly use `VISION_FRAME_MODE=camera`, clear `VISION_CROP_BOX` and `VISION_MASK_BOXES`, and send no FaceTime UI. This opt-out is for webcam/raw-camera integration; it must not be used for window screenshots. Mock mode uses the same privacy processing as the real checker. The standalone labeled-image evaluator also applies these settings; use explicit camera mode for raw-item sample datasets.
+The original calibration samples, sanitized previews and thumbnail previews remain in ignored `vision/local_samples/` for local calibration only. The labeled-image evaluator follows the same selected frame mode and optional crop/mask configuration as the API.
 
 ## Validation and outstanding physical checks
 
