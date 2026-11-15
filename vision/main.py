@@ -1,4 +1,4 @@
-"""Contract v3 API. Run from root: uvicorn vision.main:app."""
+"""Contract v4 API (v3-compatible). Run from root: uvicorn vision.main:app."""
 import asyncio
 import hmac
 import json
@@ -24,6 +24,7 @@ from .catalog import CATALOG, build_challenges
 from .checker import GeminiChecker, MockChecker, unavailable
 from .config import ROOT, Settings
 from .store import Conflict, MemoryStore, MongoStore
+from .suggest import GeminiSuggester, SuggestRequest, TestSpec, catalog_fallback, slug
 from .thumbs import UnusableEvidence, prepare_frames, thumbnail
 
 
@@ -39,7 +40,8 @@ class CreateRequest(Input):
     item_name: str = Field(min_length=1, max_length=200)
     category: Literal['console', 'phone', 'laptop', 'other']
     listing_url: str | None = Field(default=None, max_length=2048)
-    tests: list[str] = Field(max_length=20)
+    # v3: catalog IDs. v4: full test objects (e.g. from /api/tests/suggest). Both may be mixed.
+    tests: list[str | TestSpec] = Field(max_length=20)
     custom_test: str | None = Field(default=None, min_length=1, max_length=500)
 
     @field_validator('listing_url')
@@ -52,11 +54,22 @@ class CreateRequest(Input):
     @model_validator(mode='after')
     def valid_tests(self):
         ids = {t['id'] for t in CATALOG[self.category]}
-        if len(set(self.tests)) != len(self.tests) or any(t not in ids for t in self.tests):
-            raise ValueError('Tests must be unique IDs from the selected category')
+        if any(isinstance(t, str) and t not in ids for t in self.tests):
+            raise ValueError('Test IDs must come from the selected category')
+        for t in self.tests:
+            if isinstance(t, TestSpec):
+                t.id = slug(t.id)
+        keys = [t if isinstance(t, str) else t.id for t in self.tests]
+        if len(set(keys)) != len(keys):
+            raise ValueError('Tests must be unique')
         if not self.tests and not self.custom_test:
             raise ValueError('Choose at least one test or custom_test')
         return self
+
+    def test_specs(self):
+        """Every buyer test as {id,label,prompt,expect}, stored on the request."""
+        catalog = {t['id']: t for t in CATALOG[self.category]}
+        return [dict(catalog[t]) if isinstance(t, str) else t.model_dump() for t in self.tests]
 
 
 class CheckRequest(Input):
@@ -73,10 +86,13 @@ class WatchRequest(Input):
 
 def public_view(doc, settings):
     """Allowlist only: internal IDs, watcher IDs and hidden challenges never leak."""
-    catalog = {t['id']: t for t in CATALOG[doc['category']]}
     view = {k: doc.get(k) for k in ('status', 'item_name', 'category', 'listing_url')}
     view['line_number'] = settings.line_number
-    view['tests'] = [{'id': t, 'label': catalog[t]['label']} for t in doc['tests']]
+    if doc.get('test_specs'):
+        view['tests'] = [{'id': t['id'], 'label': t['label']} for t in doc['test_specs']]
+    else:  # v3 documents
+        catalog = {t['id']: t for t in CATALOG[doc['category']]}
+        view['tests'] = [{'id': t, 'label': catalog[t]['label']} for t in doc['tests']]
     view['results'] = [{**{k: r[k] for k in ('prompt', 'kind', 'result', 'confidence', 'reason', 'attempts')},
                         'thumb_url': r.get('thumb', '')} for r in doc['results']]
     if doc['status'] == 'awaiting_seller':
@@ -90,7 +106,7 @@ def public_view(doc, settings):
     return view
 
 
-def create_app(settings=None, store=None, checker=None):
+def create_app(settings=None, store=None, checker=None, suggester=None):
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -101,6 +117,7 @@ def create_app(settings=None, store=None, checker=None):
             raise RuntimeError('Live mode requires MONGODB_URI and GEMINI_API_KEY; use MOCK=1 for offline work')
         app.state.store = store if store is not None else (MemoryStore() if settings.mock else await run_in_threadpool(MongoStore, settings.mongodb_uri, settings.mongodb_database))
         app.state.checker = checker if checker is not None else (MockChecker(settings.mock_result) if settings.mock else GeminiChecker(settings))
+        app.state.suggester = suggester if suggester is not None else (None if settings.mock else GeminiSuggester(settings))
         app.state.settings = settings
         if settings.mock and store is None:
             seed_mock(app.state.store)
@@ -108,6 +125,8 @@ def create_app(settings=None, store=None, checker=None):
             yield
         finally:
             await app.state.checker.close()
+            if app.state.suggester is not None and suggester is None:
+                await app.state.suggester.close()
             await run_in_threadpool(app.state.store.close)
 
     app = FastAPI(title='ShowMe Vision', version='3', lifespan=lifespan)
@@ -183,8 +202,10 @@ def create_app(settings=None, store=None, checker=None):
         storage().expire_waiting(now())
         for _ in range(100):
             code = f'{secrets.randbelow(10000):04d}'
+            specs = body.test_specs()
+            fields = {**body.model_dump(exclude={'tests'}), 'tests': [t['id'] for t in specs], 'test_specs': specs}
             doc = dict(request_id='req_' + secrets.token_urlsafe(16), token=secrets.token_urlsafe(24), code=code,
-                       active_code=code, revision=0, **body.model_dump(), status='awaiting_seller',
+                       active_code=code, revision=0, **fields, status='awaiting_seller',
                        challenges=[], results=[], watch_chat_ids=[], created_at=now(), expires_at=now() + timedelta(hours=24))
             try:
                 storage().insert(doc)
@@ -193,6 +214,18 @@ def create_app(settings=None, store=None, checker=None):
             except DuplicateKeyError:
                 continue
         raise HTTPException(503, 'No verification code available; retry later')
+
+    @app.post('/api/tests/suggest')
+    async def suggest_tests(body: SuggestRequest):
+        """Gemini picks tests for the exact item; never blocks the buyer (falls back to tests.json)."""
+        if len(body.keep) >= 6:
+            raise HTTPException(422, 'Already 6 tests kept')
+        if app.state.suggester is None:
+            return catalog_fallback(body)
+        try:
+            return await asyncio.wait_for(app.state.suggester.suggest(body), timeout=20)
+        except Exception:
+            return catalog_fallback(body)
 
     @app.get('/api/requests/{token}')
     def report(token: str):

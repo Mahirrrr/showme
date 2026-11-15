@@ -1,4 +1,6 @@
-# API contract v3
+# API contract v4
+
+v4 (agreed by Mahir, Wan and Youngjun, Nov 14): buyer tests can be full objects, and Gemini suggests tests on `/new`. Everything from v3 still works.
 
 Copied from `docs/SHOWME_PLAN.md`, section 5. Change it only when Mahir, Wan and Youngjun all agree, and update both files in the same commit.
 
@@ -34,8 +36,18 @@ Vision service base URL: `VISION_URL`. Youngjun owns it.
 ### Public routes (web)
 
 ```
+POST /tests/suggest                                                       (v4)
+  body: { item_name, category?,                  (category is a hint for the fallback)
+          keep?:    [ { id, label, prompt, expect } ],   (tests the buyer kept; never repeated)
+          exclude?: [ label ],                    (tests the buyer dropped; not suggested again)
+          count? }                                (how many NEW tests; default 6 - keep.length)
+  →     { category, tests: [ { id, label, prompt, expect } ],   (only the NEW tests)
+          source: "gemini" | "catalog" }          ("catalog" = Gemini failed or MOCK=1: standard tests.json list)
+
 POST /requests
-  body: { item_name, category: "console"|"phone"|"laptop"|"other", listing_url?, tests: [test_id], custom_test? }
+  body: { item_name, category: "console"|"phone"|"laptop"|"other", listing_url?,
+          tests: [ test_id | { id, label, prompt, expect } ],   (v3 ids, v4 objects, or both; max 20, unique)
+          custom_test? }
   →     { request_id, token, code: "4827", link_url: "https://<domain>/v/<token>",
           line_number, status: "awaiting_seller", expires_at }      (the link lasts 24 hours)
 
