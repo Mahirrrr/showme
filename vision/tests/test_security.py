@@ -96,10 +96,10 @@ def test_allocation_retries_collision(client, monkeypatch):
     assert create(client)['code'] == '1234'
 
 
-def test_unknown_routes_and_custom_only(client):
+def test_unknown_routes_and_additional_custom(client):
     for suffix in ('start', 'finish', 'abort'):
         assert client.post('/api/agent/requests/missing/' + suffix, headers=HEAD).status_code == 404
-    response = client.post('/api/requests', json={'item_name': 'Cable', 'category': 'other', 'tests': [], 'custom_test': 'Show the connector'})
+    response = client.post('/api/requests', json={'item_name': 'Cable', 'category': 'other', 'tests': ['power_on', 'serial', 'all_sides'], 'custom_test': 'Show the connector'})
     assert response.status_code == 200
     checks = client.post('/api/agent/requests/' + response.json()['request_id'] + '/start', headers=HEAD).json()['challenges']
     assert sum(c['kind'] == 'custom' for c in checks) == 1

@@ -2,12 +2,12 @@
 
 **Buying used? Make the seller prove it live.**
 
-The buyer creates a check link and sends it to the seller. The seller FaceTimes ShowMe, and an AI agent runs the buyer's tests plus random live challenges that a pre-recorded video can't pass. Each check comes back Passed, Failed or Unverified, and the same link turns into the inspection report.
+The buyer creates a check link and sends it to the seller. The seller FaceTimes ShowMe, and an AI agent runs the buyer's tests with clear instructions and up to two retries per test. Each check comes back Passed, Failed or Unverified, and the same link turns into the inspection report. Overall verification passes when at least 75% of selected tests pass; individual failures remain visible.
 
 Built at HackUTA 2026 by Mahir, Wan and Youngjun.
 
 ## How it works
-1. **Buyer:** opens `/new`, picks the item category and the tests, and gets a link plus a 4-digit code.
+1. **Buyer:** opens `/new`, picks the item category and at least three tests, and gets a link plus a 4-digit code.
 2. **Seller:** opens the link, taps to FaceTime ShowMe, and says the code.
 3. **Agent:** shows each challenge as a card on its own video and reads it aloud. Gemini checks the frames.
 4. **Report:** the link updates live during the call and ends as a report with a thumbnail per check.

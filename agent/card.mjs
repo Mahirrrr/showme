@@ -23,7 +23,7 @@ const MARBLE = '#F4F1EA';
 const VERDICT = { passed: 'Passed', failed: 'Failed', unverified: 'Unclear' };
 // The seller can't tap FaceTime, so the waiting card lists the voice commands (code.parseCommand).
 const COMMANDS_LINE = 'SAY “READY” · “AGAIN” · “SKIP”';
-const FOOTER = { waiting: COMMANDS_LINE, checking: 'THE ORACLE LOOKS…' };
+const FOOTER = { waiting: COMMANDS_LINE, checking: 'CHECKING…' };
 const SERIF = 'Baskerville, Georgia, serif';
 const DISPLAY = 'Didot, Baskerville, Georgia, serif';
 
@@ -58,11 +58,23 @@ function meander(g, x0, x1, y, u, color) {
   g.restore();
 }
 
+/** Text hierarchy shared with renderCard: actionable hints lead only after feedback. */
+export function cardCopy({ step, total, prompt = '', status = 'info', note = '', attempt, maxAttempts = 3 } = {}) {
+  return {
+    heading: step && total ? `CHECK ${step} OF ${total}` : 'SHOWME · LIVE CHECK',
+    primary: VERDICT[status] || note || prompt,
+    task: note && !VERDICT[status] ? prompt : '',
+    attemptLabel: attempt ? `TRY ${attempt} OF ${maxAttempts}` : '',
+    commands: status === 'waiting' ? COMMANDS_LINE : '',
+  };
+}
+
 /**
  * Draws a card. `status` is one of info | waiting | checking | passed | failed | unverified.
  * Returns WIDTH × HEIGHT RGBA bytes.
  */
-export function renderCard({ step, total, title = '', prompt = '', status = 'info', note = '' } = {}) {
+export function renderCard({ step, total, title = '', prompt = '', status = 'info', note = '', attempt, maxAttempts = 3 } = {}) {
+  const copy = cardCopy({ step, total, prompt, status, note, attempt, maxAttempts });
   const canvas = createCanvas(WIDTH, HEIGHT);
   const g = canvas.getContext('2d');
   g.fillStyle = BG[status] || BG.info; g.fillRect(0, 0, WIDTH, HEIGHT);
@@ -81,9 +93,10 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
   const measure = t => g.measureText(t).width, maxW = P_W - 2 * M;
 
   g.globalAlpha = 0.8; g.font = `24px ${DISPLAY}`;
-  g.fillText(step && total ? `TRIAL ${roman(step)} · OF ${roman(total)}` : 'SHOWME · LIVE CHECK', M, 230);
+  g.fillText(copy.heading, M, 230);
   if (title) { g.font = `italic 30px ${SERIF}`; g.fillText(wrapText(title, maxW, measure)[0] ?? '', M, 272); }
   g.globalAlpha = 1;
+  if (attempt) { g.font = `24px ${DISPLAY}`; g.fillText(copy.attemptLabel, M, 314); }
 
   const verdict = VERDICT[status];
   if (verdict) {
@@ -96,15 +109,15 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
   } else if (note) {
     // The seller already heard the task: what to fix now is the big text, the task drops to a small line under it.
     g.font = `54px ${SERIF}`;
-    const lines = wrapText(note, maxW, measure).slice(0, 6), lh = 62;
+    const lines = wrapText(copy.primary, maxW, measure).slice(0, 6), lh = 62;
     let y = 520 - (lines.length * lh) / 2 + 40;
     lines.forEach(l => { g.fillText(l, M - 2, y); y += lh; });
     y += 30;
     g.globalAlpha = 0.75; g.font = `24px ${DISPLAY}`; g.fillText('THE TASK', M, y); y += 42;
     g.font = `italic 32px ${SERIF}`;
-    wrapText(prompt, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 40; });
+    wrapText(copy.task, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 40; });
     g.globalAlpha = 1;
-    if (status === 'waiting') { g.font = `24px ${DISPLAY}`; g.fillText(COMMANDS_LINE, M, Math.max(y + 30, 960)); }
+    if (status === 'waiting') { g.font = `24px ${DISPLAY}`; g.fillText(copy.commands, M, Math.min(Math.max(y + 30, 960), 1120)); }
   } else {
     g.font = `68px ${SERIF}`;
     const lines = wrapText(prompt, maxW, measure).slice(0, 6), lh = 76;

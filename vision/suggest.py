@@ -72,6 +72,8 @@ def build_prompt(body, count):
         '',
         f"Write exactly {count} {new}test{'' if count == 1 else 's'} that best prove THIS item is genuine, working and as described.",
         'Rules:',
+        '- Use everyday English, one clear action per prompt. Avoid jargon and multi-part instructions.',
+        '- Keep prompts short (ideally under 15 words), without losing what the test verifies.',
         '- Each test must be checkable visually in under 15 seconds, on camera, by the seller alone.',
         '- Prefer tests that expose common scams or defects for this specific product',
         '  (model/serial or About screens, activation or account locks, battery health,',

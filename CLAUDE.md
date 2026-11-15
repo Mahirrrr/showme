@@ -1,6 +1,6 @@
 # ShowMe: read this first (every teammate's Claude reads this file)
 
-**What we're building:** a buyer about to purchase a used item makes a check link. The seller opens it and FaceTimes ShowMe. A Chert FaceTime agent runs the buyer's tests plus secret random liveness challenges, Gemini judges each one Passed, Failed or Unverified, and the same link turns into a live report. Event: HackUTA 2026. Judging is Sunday at 1 PM.
+**What we're building:** a buyer about to purchase a used item makes a check link. The seller opens it and FaceTimes ShowMe. A Chert FaceTime agent runs at least three buyer-selected tests with clear instructions and up to two retries per test, Gemini judges each one Passed, Failed or Unverified, and the same link turns into a live report. Event: HackUTA 2026. Judging is Sunday at 1 PM.
 
 ## Read order
 1. This file.
@@ -40,7 +40,7 @@
 - **Integrity:** we claim a sponsor prize only if the live demo really calls that product. Cut a feature, drop its claim. The README's sponsor receipts table must match the code.
 - **Never claim what we couldn't see:** a check that the camera couldn't show after the retries is `unverified`, never `passed`.
 - **Privacy:** at most one thumbnail per check (400 px wide max). Drop all other frames right after the check. Never show the seller's phone number.
-- **Liveness challenges are secret:** no public route returns them before the call.
+- **Contract v5.1:** no surprise checks in new inspections. `summary.liveness = "not_run"`. Keep historical reports readable. Failed-then-passed tests count as passed; metadata-only attempt history is retained. Overall PASSED requires at least `PASSING_THRESHOLD_PERCENT` (default 75) of selected buyer tests to pass; individual outcomes never change because of the overall score.
 
 ## Key deadlines
 - 6:00 PM Saturday: Plan A (live video) or Plan B (photo upload) decision.

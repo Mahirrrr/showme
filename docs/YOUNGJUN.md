@@ -1,6 +1,8 @@
 # Youngjun: start here (`vision/`: FastAPI + Gemini + MongoDB Atlas)
 
-You own the brain: requests, the secret liveness challenges, the Gemini checks and the database. Wan's pages and Mahir's agent both call your routes, so keep the shapes in `shared/contract.md` exact.
+> **Current v5 update:** The approved coordinated UX removes surprise checks, requires three selected tests, returns `liveness: "not_run"` for new reports, and retains metadata-only retry history. Historical liveness task descriptions below are superseded by `shared/contract.md`.
+
+You own the brain: requests, buyer-selected challenges, Gemini checks and the database. Wan's pages and Mahir's agent both call your routes, so keep the shapes in `shared/contract.md` exact.
 
 ## Your tasks
 The step-by-step list, with times and "done when" checks, is `docs/SHOWME_PLAN.md`, section 6, steps **Y1 to Y12**. The internals (Mongo document, `public_view()`, Gemini prompt) are in `docs/ARCHITECTURE.md`, section 5. In short:

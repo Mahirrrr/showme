@@ -1,6 +1,6 @@
 # ShowMe vision backend
 
-Python **3.11+**, FastAPI, Gemini, and MongoDB Atlas. Implements Contract v3 without changing `shared/contract.md`. All HTTP routes are under `/api`.
+Python **3.11+**, FastAPI, Gemini, and MongoDB Atlas. Implements Contract v5.1 as defined in `shared/contract.md`. All HTTP routes are under `/api`.
 
 ## Start offline
 
@@ -43,14 +43,14 @@ Create a request:
 POST /api/requests
 Content-Type: application/json
 
-{"item_name":"PS4 controller","category":"console","tests":["power_on","buttons"],"custom_test":"Show the charging cable"}
+{"item_name":"PS4 controller","category":"console","tests":["power_on","buttons","serial"],"custom_test":"Show the charging cable"}
 ```
 
 The response contains exactly `request_id`, `token`, `code`, `link_url`, `line_number`, `status`, and `expires_at`. Read the catalog directly from `shared/tests.json`; no extra catalog route has been invented.
 
 Poll `GET /api/requests/{token}` every two seconds while waiting/in-call, and stop at `complete` or `expired`. The endpoint returns buyer tests, live `current_challenge`, result rows and (when finished) the summary and verification time. The code disappears after leaving `awaiting_seller`. Handle 404, 409 and 503; respect `Cache-Control: no-store`.
 
-Each result's `thumb_url` is a data URL, so render it directly as an image. Unperformed checks have an empty thumbnail and `attempts: 0`; show a placeholder. If `summary.liveness == "failed"`, show **Live check failed: possible recording**. An unverified or missing liveness check also conservatively maps to `failed`, since Contract v3 has no third summary-liveness value. `status` remains `complete`; `complete_recording` is a fixture name, not a status.
+Each result's `thumb_url` is a data URL, so render it directly as an image. Unperformed checks have an empty thumbnail and `attempts: 0`; show a placeholder. If `summary.liveness == "failed"`, show **Live check failed: possible recording**. New inspections return `not_run`; historical liveness reports keep their original values. `status` remains `complete`; `complete_recording` is a fixture name, not a status.
 
 ## Mahir: agent integration
 
@@ -59,14 +59,14 @@ Set `VISION_URL=http://localhost:8000/api` and the same `AGENT_KEY`. Send `X-Age
 1. `GET /api/agent/requests/by-code/{code}`; after the spoken-code retries, use `GET /api/agent/requests/latest-waiting`.
 2. `POST /api/agent/requests/{request_id}/start` returns `{challenges:[{id,kind,prompt,expect}]}`. Retrying start during the same call returns the same challenges.
 3. Present each returned challenge, wait for evidence, then `POST /api/agent/check` with `{request_id,challenge_id,attempt,frames}`. Frames must be **2–4 raw base64 JPEG strings**, not data URLs, from the last two seconds. The backend cannot verify capture time because the contract supplies no timestamps; the agent must clear stale/muted-camera buffers.
-4. `attempt` starts at 1 and increments through 3 (initial attempt plus two retries). The agent owns the 15-second retry timing and 4:30 call cap. A persisted duplicate attempt returns the original verdict. Do not retry a passed check. Do not advance the attempt number when a 409 says an update raced; reload/retry the current operation.
+4. `attempt` starts at 1 and increments through 3 (initial attempt plus two retries). The agent allows 12 seconds to act after each instruction and reserves report-completion time within the 4:30 call budget. A persisted duplicate attempt returns the original verdict. Do not retry a passed check. Do not advance the attempt number when a 409 says an update raced; reload/retry the current operation.
 5. `POST /api/agent/requests/{request_id}/finish` returns `{summary,link_url,notify_chat_ids}`. It is safe to retry. Untested checks become `unverified`. The last evaluated attempt determines each result.
 6. On a dropped call, `POST /api/agent/requests/{request_id}/abort`. Partial results and challenges are cleared; the original code works again until expiry. A new start generates new challenge IDs, and evaluations from the old call are rejected.
 7. For `WATCH`, `POST /api/agent/requests/watch` with `{code,chat_id}`. Duplicate registrations are deduplicated. The backend returns recipients at finish; Mahir's agent sends the messages.
 
 Mahir should use a **30-second HTTP request timeout** for `/api/agent/check`. This allows the 20-second Gemini deadline plus preprocessing, Atlas writes and network overhead. Replace the former six-second client timeout for this route; a client abort can otherwise occur before the backend persists the result. The HTTP timeout is separate from the agent's retry pacing and 4:30 call guard.
 
-`best_frame` is a **zero-based index** into the submitted frame order. Checks persist progress before awaiting Gemini. The public current prompt becomes available at start/check submission; Contract v3 has no separate endpoint for the instant the agent displays a new prompt. Result ticks appear as checks finish.
+`best_frame` is a **zero-based index** into the submitted frame order. Checks persist progress before awaiting Gemini. The public current prompt becomes available at start/check submission; Contract v5 has no separate endpoint for the instant the agent displays a new prompt. Result ticks appear as checks finish.
 
 Status failures: 401 invalid/missing key; 404 unknown request/challenge/waiting code; 409 invalid state/attempt/concurrent update; 413 oversized body; 422 invalid input/images; 503 unavailable database or exhausted code allocation. Provider errors/timeouts become persisted `unverified` verdicts, never mock passes. A database outage does not silently switch stores.
 
@@ -140,10 +140,28 @@ For real accuracy and speed measurements, put labeled photos under ignored `visi
 vision/.venv/bin/python -m vision.evaluate vision/local_samples/manifest.json
 ```
 
-The evaluator prints per-sample predictions, accuracy and median latency; provider errors raise instead of inflating accuracy through fallback results. Gather about 20 labeled real cases including failures and at least three dark/blurry cases. Targets: ≥90% accuracy, initially median <3 seconds and ultimately <2.5 seconds. Run the second-phone recording attack five times with random finger challenges, and perform webcam/FaceTime integration with Wan and Mahir. None of these physical validations has been completed by automated tests.
+The evaluator prints per-sample predictions, accuracy and median latency; provider errors raise instead of inflating accuracy through fallback results. Gather about 20 labeled real cases including failures and at least three dark/blurry cases. Targets: ≥90% accuracy, initially median <3 seconds and ultimately <2.5 seconds. Perform webcam/FaceTime integration with Wan and Mahir, including an initial failure followed by a successful retry. Separate recording-detection claims apply only to historical liveness reports. None of these physical validations has been completed by automated tests.
 
-No photo-upload route is added: Plan B has not been selected and Contract v3 defines none. It requires a team-approved contract update if needed. Changes to `shared/test_frames/` are outside the authorized file scope; use the ignored local sample directory for validation now.
+No photo-upload route is added: Plan B has not been selected and Contract v5 defines none. It requires a team-approved contract update if needed. Changes to `shared/test_frames/` are outside the authorized file scope; use the ignored local sample directory for validation now.
 
 For an approved deployment, run `uvicorn vision.main:app --host 127.0.0.1 --port 8000` from the repo root using the virtual environment, let systemd supply the environment, and preserve `/api` when proxying through nginx. TLS, Vultr access and the frontend deployment remain team integration tasks.
 
 SDK references used for implementation: [Google Gen AI SDK](https://googleapis.github.io/python-genai/) and [PyMongo indexes](https://www.mongodb.com/docs/languages/python/pymongo-driver/current/indexes/).
+
+
+## Coordinated verification UX (Contract v5)
+
+New requests require at least three selected tests, including suggested objects or standard IDs. The optional custom-text test is additional. Only selected buyer/custom tests run; there are no surprise challenges. New summaries use `liveness: "not_run"`; Contract v5.1 reports display the authoritative overall score described below. Completed historical reports are preserved, including older liveness banners.
+
+Each test has an initial attempt plus up to two retries. Cards show "Try N of 3" and retries are spoken. Sellers receive 12 seconds to act each time; the agent checks the remaining 4:30 budget before evaluations and reserves 15 seconds for finish. Slow calls may end before every retry; unperformed tests are unverified. The backend keeps ordered, image-free `attempt_history`, and uses the last saved result for the final verdict and totals. Failed → passed counts as one passed test.
+
+Authentication, camera-mode preprocessing, sanitized ≤400 px thumbnails, the 20-second Gemini deadline and 30-second agent check HTTP timeout are unchanged. Restart all components together for the new summary value and minimum selection rule. Do not reuse obsolete local test scripts that create fewer than three tests.
+
+
+## Overall scoring (Contract v5.1)
+
+The backend now supplies an authoritative overall verdict: at least **75%** of selected buyer tests must pass. Configure `PASSING_THRESHOLD_PERCENT` in the backend (default 75, valid range >0 to 100). Scores count final outcomes once after retries; failed, unverified and unperformed tests remain not passed. With four selected tests, three passes meet the default threshold; with three selections, two passes do not.
+
+New summaries add `overall_verdict`, `pass_percentage`, `passed_tests`, `total_selected_tests` and `passing_threshold_percent` inside the existing MongoDB summary. Optional custom-text checks and historical liveness checks stay visible but are excluded from selected-test scoring. Existing aggregate counts are unchanged. The threshold is saved at finish so future configuration changes do not alter that completed score. Legacy documents without score fields are enriched on read under the current threshold without modifying stored records.
+
+The report and agent use the backend verdict. Passing overall never changes an individual Failed/Unverified row. Show a warning whenever overall passes with individual issues, and preserve historical liveness warnings. The UI rounds percentages for display only; the decision uses the exact ratio. Restart components together; the API routes, three-test minimum, authentication, camera-mode/privacy processing, Gemini and Atlas adapters, and existing timeouts are unchanged.

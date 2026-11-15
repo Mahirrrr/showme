@@ -6,22 +6,24 @@
 
 export const LIMITS = {
   maxAttempts: 3,          // vision accepts attempts 1 to 3
-  checkWindowMs: 30_000,   // each check gets up to 30 s; it ends early on a pass
-  actMs: 2_500,            // after the prompt is spoken, time to do the action before the first look
-  retryGapMs: 3_000,       // pause between silent retries (the hint is on screen meanwhile)
+  checkRequestMs: 30_000, // matches vision HTTP timeout
+  finishReserveMs: 15_000, // leave time for finish + goodbye
+  noFrameWindowMs: 12_000, // camera recovery does not consume an evaluation
+  actMs: 12_000,            // time to act after the first spoken instruction
+  retryGapMs: 12_000,       // time to act after each spoken retry
   noFrameRetryMs: 2_000,   // look again this soon when the camera shows nothing
-  callBudgetMs: 270_000,   // never start a check that can't end by 4:30 (5-minute FaceTime cap)
+  callBudgetMs: 270_000,   // overall call budget, including report completion
   codeListenMs: 12_000,
 };
 
 const say1 = (text) => text.replace(/\s+/g, ' ').trim();
-/** What the agent says for a prompt: the card keeps the buyer's words, the voice skips a leading "Please". */
+/** Normalize spacing and a leading "Please" consistently for speech and cards. */
 const spoken = (prompt) => { const t = say1(prompt).replace(/^please,?\s+/i, ''); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 // Rough stage of a test from its wording, for tests Gemini wrote (not in the catalog):
 // 0 = turn it on, 1 = on-screen info (Settings, About, battery, IMEI…), 2 = physical (ports, sides, scratches).
 const STAGES = [
-  /\b(turn (it )?on|power(ed)? on|wake|lock screen|boot|start(s)? up)\b/i,
+  /\b(turn (it )?on|power(ed)? on|turned on|wake|lock screen|boot|start(s)? up)\b/i,
   /settings|about|battery|imei|\*#06#|serial|model|storage|account|apple id|signed (in|out)|launch|game|menu|screen shows/i,
 ];
 const stageOf = prompt => { const i = STAGES.findIndex(re => re.test(prompt)); return i < 0 ? STAGES.length : i; };
@@ -29,14 +31,15 @@ const stageOf = prompt => { const i = STAGES.findIndex(re => re.test(prompt)); r
 /**
  * Logical order: the buyer's tests go power on, then on-screen info, then physical checks (catalog order
  * breaks ties, since shared/tests.json lists them so each step leads into the next), then a custom test,
- * then the secret liveness challenges. Vision returns them shuffled. Stable otherwise.
+ * legacy surprise challenges are ignored. Stable otherwise.
  */
 export function orderChallenges(challenges, catalog = {}) {
   const rankOf = new Map();
   for (const tests of Object.values(catalog)) tests.forEach((t, i) => { if (!rankOf.has(t.prompt)) rankOf.set(t.prompt, i); });
   const group = c => (c.kind === 'liveness' ? 2 : c.kind === 'custom' ? 1 : 0);
   return challenges
-    .map((c, i) => ({ c, i }))
+    .filter(c => c.kind !== 'liveness') // older API responses must not add surprise checks
+    .map((c, i) => ({ c: { ...c, prompt: spoken(c.prompt) }, i }))
     .sort((a, b) => group(a.c) - group(b.c)
       || stageOf(a.c.prompt) - stageOf(b.c.prompt)
       || (rankOf.get(a.c.prompt) ?? 99) - (rankOf.get(b.c.prompt) ?? 99)
@@ -56,17 +59,32 @@ export function hintFor(verdict, max = 100) {
   return `${cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : cut.length)}…`;
 }
 
+/** Use the API's score snapshot; keep old server summaries readable. */
+export function completionFor(s) {
+  if ((s.overall_verdict === 'passed' || s.overall_verdict === 'failed') && typeof s.pass_percentage === 'number') {
+    const percentage = `${Number(s.pass_percentage.toFixed(2))}%`;
+    const warning = s.overall_verdict === 'passed' && (s.failed > 0 || s.unverified > 0) ? ' Some checks did not pass. Read the report.' : '';
+    return {
+      headline: `Overall ${s.overall_verdict.toUpperCase()}`,
+      status: s.overall_verdict,
+      note: `${s.passed_tests} / ${s.total_selected_tests} selected tests passed · ${percentage}.${warning}`,
+      spoken: `Overall verification ${s.overall_verdict}. ${s.passed_tests} of ${s.total_selected_tests} selected tests passed.${warning}`,
+    };
+  }
+  const headline = s.liveness === 'failed' ? 'Live check failed' : s.failed === 0 && s.unverified === 0 ? (s.liveness === 'not_run' ? 'All checks passed' : 'Verified live') : 'Check complete';
+  return { headline, status: s.liveness === 'failed' ? 'failed' : s.failed || s.unverified ? 'unverified' : 'passed', note: `${s.passed} passed · ${s.failed} failed · ${s.unverified} unverified`, spoken: `${s.passed} of ${s.total} passed.` };
+}
+
 export async function runCall(deps, limits = LIMITS) {
   const { say, show, listenForCode, grabFrames, vision, sleep, now, log = () => {}, catalog } = deps;
-  // A pause the seller can cut short by voice: resolves with "skip" | "again" | "ready", or null after ms.
-  const pause = async ms => (deps.waitForCommand ? deps.waitForCommand(ms) : (await sleep(ms), null));
+  const pause = async ms => deps.waitForCommand ? deps.waitForCommand(ms) : (await sleep(ms), null);
   const startedAt = now();
   const timeLeft = () => limits.callBudgetMs - (now() - startedAt);
   const state = { request: null, results: [], finished: false };
 
   // 1. Greet and link the call to a request.
-  show({ prompt: 'Flip to your back camera, then say the 4-digit code from the link', status: 'info' });
-  await say("Hi, I'm ShowMe. Flip to your back camera and say the 4-digit code from the link.");
+  show({ prompt: 'Say the four-digit code from the link.', status: 'info' });
+  await say("Hi, I'm ShowMe. Say the four-digit code from the link.");
   let code = await listenForCode(limits.codeListenMs);
   let request = code ? await vision.byCode(code) : null;
   if (!request) {
@@ -86,55 +104,82 @@ export async function runCall(deps, limits = LIMITS) {
   }
   state.request = request;
 
-  // 2. Start: the buyer's tests plus the secret liveness challenges, in an order that makes sense.
+  // 2. Start: only buyer-selected tests, in a useful order.
   const { challenges: raw } = await vision.start(request.request_id);
   const challenges = orderChallenges(raw, catalog);
-  await say(`Thanks. ${challenges.length} quick checks. Keep the ${request.item_name} in view. Say skip or again anytime.`);
+  show({ prompt: 'Use your back camera.', status: 'info' });
+  await say('Use your back camera.');
+  await say(`Thanks. ${challenges.length} checks. Keep the item in view. Say ready, again, or skip.`);
 
-  // 3. Each challenge: say it once, then look for up to 30 s. Retries are silent; the card says what's wrong.
+  // Each evaluation gets time to act. Never start one that cannot fit the call budget.
+  const canAttempt = actionMs => timeLeft() >= actionMs + limits.checkRequestMs + limits.finishReserveMs;
   let nudged = false;
   for (let i = 0; i < challenges.length; i++) {
-    if (timeLeft() < limits.checkWindowMs) { log('[flow] call budget reached'); break; }
+    if (!canAttempt(limits.actMs)) { log('[flow] call budget reached'); break; }
     const ch = challenges[i];
     const card = { step: i + 1, total: challenges.length, title: request.item_name, prompt: ch.prompt };
-    show({ ...card, status: 'waiting' });
-    const shownAt = now(), deadline = shownAt + limits.checkWindowMs; // the window opens with the card, not after the speech
-    deps.clearCommands?.(); // nothing said before this task counts for it
-    await say(spoken(ch.prompt));
-    let command = await pause(limits.actMs);
-    let attempt = 0, last = null;
-    while (attempt < limits.maxAttempts && now() < deadline) {
-      if (command === 'skip') { log(`[flow] check ${i + 1} skipped by the seller`); break; }
-      if (command === 'again') { await say(spoken(ch.prompt)); command = await pause(limits.actMs); continue; }
-      command = null; // "ready" (or nothing): look now
-      // The contract wants 2 to 4 frames; fewer counts as no frames (vision would reject it with a 422).
-      const grabbed = grabFrames();
-      if (grabbed.length < 2) {
-        show({ ...card, status: 'waiting', note: "I can't see it. Point the camera at the item." });
-        if (!nudged) { nudged = true; await say("I can't see anything. Point the camera at the item."); }
-        command = await pause(limits.noFrameRetryMs);
-        continue;
+    const shownAt = now();
+    deps.clearCommands?.(); // Commands from an earlier task must not affect this one.
+    let attempt = 0, last = null, transportFailures = 0, skipped = false;
+    while (attempt < limits.maxAttempts) {
+      const actionMs = attempt === 0 && transportFailures === 0 ? limits.actMs : limits.retryGapMs;
+      if (!canAttempt(actionMs)) break;
+      const nextAttempt = attempt + 1;
+      const retry = nextAttempt > 1 || transportFailures > 0;
+      const attemptCard = { ...card, attempt: nextAttempt, maxAttempts: limits.maxAttempts };
+      // The instruction is primary initially; after a failure, the hint is primary.
+      show({ ...attemptCard, status: 'waiting', note: last ? hintFor(last) : '' });
+      await say(retry ? `Let's try again. ${ch.prompt}` : ch.prompt);
+      if (!canAttempt(actionMs)) break;
+      let command = await pause(actionMs);
+      while (command === 'again' && canAttempt(actionMs)) {
+        show({ ...attemptCard, status: 'waiting', note: '' });
+        await say(ch.prompt);
+        if (!canAttempt(actionMs)) break;
+        command = await pause(actionMs);
       }
-      attempt++;
-      show({ ...card, status: 'checking' });
+      if (command === 'skip') { skipped = true; break; }
+      if (command === 'again' || !canAttempt(0)) break;
+      // "ready" ends the action pause immediately; only fresh 2–4 frame evidence is used.
+      let grabbed = grabFrames();
+      const cameraDeadline = now() + Math.min(limits.noFrameWindowMs, Math.max(0, timeLeft() - limits.checkRequestMs - limits.finishReserveMs));
+      let repeatRequested = false;
+      while (grabbed.length < 2 && now() < cameraDeadline) {
+        show({ ...attemptCard, status: 'waiting', note: 'Point the camera at the item.' });
+        if (!nudged) { nudged = true; await say('Point the camera at the item.'); }
+        command = await pause(Math.min(limits.noFrameRetryMs, Math.max(0, cameraDeadline - now())));
+        if (command === 'skip') { skipped = true; break; }
+        if (command === 'again') { repeatRequested = true; break; }
+        grabbed = grabFrames();
+      }
+      if (skipped) break;
+      if (repeatRequested) continue;
+      if (grabbed.length < 2) {
+        last ??= { result: 'unverified', reason: 'No clear camera view.' };
+        break;
+      }
+      if (!canAttempt(0)) break;
+      show({ ...attemptCard, status: 'checking', note: '' });
       const askedAt = now();
       try {
-        last = await vision.check({ request_id: request.request_id, challenge_id: ch.id, attempt, frames: grabbed });
+        last = await vision.check({ request_id: request.request_id, challenge_id: ch.id, attempt: nextAttempt, frames: grabbed });
+        attempt = nextAttempt;
         log(`[timing] check ${i + 1}.${attempt}: ${last.result} in ${now() - askedAt} ms (${now() - shownAt} ms into this check)`);
+        transportFailures = 0;
       } catch (error) {
         log(`[flow] check failed: ${error.message}`);
-        last = { result: 'unverified', confidence: 0, reason: 'The check timed out.' };
+        last = { result: 'unverified', confidence: 0, reason: 'Connection interrupted. Hold the item in view.' };
+        // A lost HTTP response may already be saved; reuse this attempt number.
+        if (++transportFailures >= 2) break;
+        continue;
       }
       if (last.result === 'passed') break;
-      if (attempt < limits.maxAttempts && now() < deadline) {
-        show({ ...card, status: 'waiting', note: hintFor(last) });
-        command = await pause(limits.retryGapMs);
-      }
     }
+    if (skipped) log(`[flow] check ${i + 1} skipped by the seller`);
     const result = last?.result ?? 'unverified';
-    show({ ...card, status: result, note: result === 'passed' ? '' : last ? hintFor(last) : 'No camera view' });
+    show({ ...card, status: result, note: result === 'passed' ? '' : skipped ? (last ? `Skipped. ${hintFor(last)}` : 'Skipped. Not verified.') : last ? hintFor(last) : 'Call time limit reached' });
+    if (result === 'passed' && timeLeft() > limits.finishReserveMs + 2000) await say('Got it.');
     log(`[timing] check ${i + 1} done: ${result} after ${now() - shownAt} ms, ${attempt} attempt(s)`);
-    if (result === 'passed') await say('Got it.');
     state.results.push({ id: ch.id, kind: ch.kind, result, attempts: attempt });
   }
 
@@ -142,8 +187,8 @@ export async function runCall(deps, limits = LIMITS) {
   const done = await vision.finish(request.request_id);
   state.finished = true;
   const s = done.summary;
-  const headline = s.liveness === 'failed' ? 'Live check failed' : s.failed === 0 && s.unverified === 0 ? 'Verified live' : 'Check complete';
-  show({ prompt: `${headline}. The report is on the buyer's link.`, status: s.liveness === 'failed' ? 'failed' : s.failed || s.unverified ? 'unverified' : 'passed', note: `${s.passed} passed · ${s.failed} failed · ${s.unverified} unverified` });
-  await say(say1(`All done. ${s.passed} of ${s.total} passed. The report is on the buyer's link. Goodbye.`));
+  const completion = completionFor(s);
+  show({ prompt: `${completion.headline}. The report is on the buyer's link.`, status: completion.status, note: completion.note });
+  await say(say1(`All done. ${completion.spoken} The report is on the buyer's link. Goodbye.`));
   return state;
 }
