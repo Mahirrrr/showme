@@ -12,6 +12,7 @@ export const LIMITS = {
   actMs: 12_000,            // time to act after the first spoken instruction
   retryGapMs: 12_000,       // time to act after each spoken retry
   noFrameRetryMs: 2_000,   // look again this soon when the camera shows nothing
+  shotMs: 12_000,          // guided shots: time to line up each side before it is taken anyway
   callBudgetMs: 270_000,   // overall call budget, including report completion
   codeListenMs: 12_000,
 };
@@ -27,6 +28,20 @@ const STAGES = [
   /settings|about|battery|imei|\*#06#|serial|model|storage|account|apple id|signed (in|out)|launch|game|menu|screen shows/i,
 ];
 const stageOf = prompt => { const i = STAGES.findIndex(re => re.test(prompt)); return i < 0 ? STAGES.length : i; };
+
+// Guided shots. Gemini judges still frames, so a task that needs movement (rotate, pan, front and back) gets
+// one steady shot per side: the seller lines up each side and says "ready". All shots go in one Gemini try.
+const SHOT_PLANS = [
+  [/\bfront (and|&) back\b|\bboth sides\b/i, ['Front', 'Back']],
+  [/\btop (and|&) bottom\b/i, ['Top', 'Bottom']],
+  [/\brotate\b|\bspin\b|\b360\b|\bturn (it|the \w+) around\b|\ball (four |4 )?sides\b|\bevery side\b|\ball around\b|\ball angles\b/i, ['Front', 'Right side', 'Back', 'Left side']],
+  [/\bpan\b|\bsweep\b/i, ['Start', 'Middle', 'End']],
+];
+/** The shots a task needs (2 to 4 labels), or null for a task one look can judge. */
+export function shotPlan(prompt) {
+  const hit = SHOT_PLANS.find(([re]) => re.test(prompt ?? ''));
+  return hit ? hit[1] : null;
+}
 
 /**
  * Logical order: the buyer's tests go power on, then on-screen info, then physical checks (catalog order
@@ -114,6 +129,28 @@ export async function runCall(deps, limits = LIMITS) {
   // Each evaluation gets time to act. Never start one that cannot fit the call budget.
   const canAttempt = actionMs => timeLeft() >= actionMs + limits.checkRequestMs + limits.finishReserveMs;
   let nudged = false;
+  // One steady shot per side; "again" retakes the current shot, "skip" ends the task. Returns { skipped, frames }.
+  const takeShots = async (shots, attemptCard) => {
+    const frames = [];
+    for (let k = 0; k < shots.length; k++) {
+      const note = `Shot ${k + 1} of ${shots.length}: ${shots[k]}. Say READY.`;
+      show({ ...attemptCard, status: 'waiting', note });
+      await say(`${shots[k]}.`);
+      let command = await pause(limits.shotMs);
+      while (command === 'again') { show({ ...attemptCard, status: 'waiting', note }); await say(`${shots[k]}.`); command = await pause(limits.shotMs); }
+      if (command === 'skip') return { skipped: true, frames };
+      let got = grabFrames();
+      const until = now() + limits.noFrameWindowMs;
+      while (got.length === 0 && now() < until) {
+        show({ ...attemptCard, status: 'waiting', note: 'Point the camera at the item.' });
+        if ((await pause(limits.noFrameRetryMs)) === 'skip') return { skipped: true, frames };
+        got = grabFrames();
+      }
+      if (got.length) frames.push(got.at(-1)); // the newest frame: what the seller was showing at "ready"
+      log(`[shot] ${k + 1}/${shots.length} ${shots[k]}: ${command ?? 'timeout'}${got.length ? '' : ', no frame'}`);
+    }
+    return { skipped: false, frames };
+  };
   for (let i = 0; i < challenges.length; i++) {
     if (!canAttempt(limits.actMs)) { log('[flow] call budget reached'); break; }
     const ch = challenges[i];
@@ -121,8 +158,9 @@ export async function runCall(deps, limits = LIMITS) {
     const shownAt = now();
     deps.clearCommands?.(); // Commands from an earlier task must not affect this one.
     let attempt = 0, last = null, transportFailures = 0, skipped = false;
+    const shots = shotPlan(ch.prompt);
     while (attempt < limits.maxAttempts) {
-      const actionMs = attempt === 0 && transportFailures === 0 ? limits.actMs : limits.retryGapMs;
+      const actionMs = shots ? shots.length * limits.shotMs : attempt === 0 && transportFailures === 0 ? limits.actMs : limits.retryGapMs;
       if (!canAttempt(actionMs)) break;
       const nextAttempt = attempt + 1;
       const retry = nextAttempt > 1 || transportFailures > 0;
@@ -131,6 +169,13 @@ export async function runCall(deps, limits = LIMITS) {
       show({ ...attemptCard, status: 'waiting', note: last ? hintFor(last) : '' });
       await say(retry ? `Let's try again. ${ch.prompt}` : ch.prompt);
       if (!canAttempt(actionMs)) break;
+      let grabbed;
+      if (shots) {
+        const taken = await takeShots(shots, attemptCard);
+        if (taken.skipped) { skipped = true; break; }
+        if (taken.frames.length < 2) { last ??= { result: 'unverified', reason: 'No clear camera view.' }; break; }
+        grabbed = taken.frames;
+      } else {
       let command = await pause(actionMs);
       while (command === 'again' && canAttempt(actionMs)) {
         show({ ...attemptCard, status: 'waiting', note: '' });
@@ -141,7 +186,7 @@ export async function runCall(deps, limits = LIMITS) {
       if (command === 'skip') { skipped = true; break; }
       if (command === 'again' || !canAttempt(0)) break;
       // "ready" ends the action pause immediately; only fresh 2–4 frame evidence is used.
-      let grabbed = grabFrames();
+      grabbed = grabFrames();
       const cameraDeadline = now() + Math.min(limits.noFrameWindowMs, Math.max(0, timeLeft() - limits.checkRequestMs - limits.finishReserveMs));
       let repeatRequested = false;
       while (grabbed.length < 2 && now() < cameraDeadline) {
@@ -157,6 +202,7 @@ export async function runCall(deps, limits = LIMITS) {
       if (grabbed.length < 2) {
         last ??= { result: 'unverified', reason: 'No clear camera view.' };
         break;
+      }
       }
       if (!canAttempt(0)) break;
       show({ ...attemptCard, status: 'checking', note: '' });
