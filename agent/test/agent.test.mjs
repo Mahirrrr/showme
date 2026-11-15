@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCode, makeCodeListener } from '../code.mjs';
+import { parseCode, makeCodeListener, parseCommand, makeCommandListener } from '../code.mjs';
 import { renderCard, withPulse, wrapText, WIDTH, HEIGHT, COLUMN } from '../card.mjs';
 import { FrameBuffer, toJpegBase64, findCallerStrip, cropToCallerVideo, makeCallerEncoder } from '../frames.mjs';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
@@ -35,6 +35,33 @@ test('makeCodeListener: a code heard while listening resolves it', async () => {
   const p = l.listen(1000);
   l.heard('1234');
   assert.equal(await p, '1234');
+});
+
+// ---------- voice commands (FaceTime can't take taps, so the seller says them)
+test('parseCommand: short phrases only', () => {
+  for (const [t, c] of [['skip', 'skip'], ['Next please.', 'skip'], ['move on', 'skip'], ['okay ready', 'ready'], ["I'm done", 'ready'],
+    ['check it now', 'ready'], ['try again', 'again'], ['Again?', 'again'], ['say that again', 'again'], ['repeat', 'again']]) {
+    assert.equal(parseCommand(t), c, t);
+  }
+  assert.equal(parseCommand('Yeah, I already did that. I tried that before, again and again.'), null); // chatter
+  assert.equal(parseCommand('four eight two seven'), null);
+  assert.equal(parseCommand(''), null);
+});
+test('makeCommandListener: a command ends the wait early, otherwise it times out with null', async () => {
+  const l = makeCommandListener();
+  const p = l.wait(1000);
+  l.heard('skip');
+  assert.equal(await p, 'skip');
+  assert.equal(await l.wait(20), null);
+});
+test('makeCommandListener: a command said between waits is kept for the next one, and clear() drops it', async () => {
+  const l = makeCommandListener();
+  l.heard('ready');
+  assert.equal(await l.wait(20), 'ready');
+  l.heard('again'); l.clear();
+  assert.equal(await l.wait(20), null);
+  l.heard(null); // not a command: ignored
+  assert.equal(await l.wait(20), null);
 });
 
 // ---------- parseCode
@@ -190,7 +217,7 @@ test('http vision: sends the agent key, maps 404 to null, wraps errors', async (
 });
 
 // ---------- call flow
-function harness({ codes = ['4827'], frames = ['jpg', 'jpg'], results, checkThrows = false, clockStep = 0 } = {}) {
+function harness({ codes = ['4827'], frames = ['jpg', 'jpg'], results, checkThrows = false, clockStep = 0, commands } = {}) {
   const said = [], shown = [];
   let t = 0;
   const vision = makeMockVision({ results });
@@ -201,6 +228,8 @@ function harness({ codes = ['4827'], frames = ['jpg', 'jpg'], results, checkThro
     listenForCode: async () => codes.shift() ?? null,
     grabFrames: () => (typeof frames === 'function' ? frames() : frames),
     vision, sleep: async ms => { t += ms; }, now: () => t,
+    // Each pause takes the next scripted command; null (or none left) means the pause runs its full time.
+    ...(commands && { waitForCommand: async ms => { const c = commands.shift() ?? null; if (!c) t += ms; return c; }, clearCommands: () => {} }),
   };
   return { deps, said, shown, vision, clock: () => t };
 }
@@ -293,6 +322,38 @@ test('flow: a single frame is not enough (contract: 2 to 4 frames), so it never 
   const state = await runCall(h.deps);
   assert.equal(h.vision.calls.filter(c => c.name === 'check').length, 0);
   assert.ok(state.results.every(r => r.result === 'unverified'));
+});
+test('flow: "skip" ends a check at once as unverified, without asking vision', async () => {
+  const h = harness({ commands: ['skip'] });
+  const state = await runCall(h.deps);
+  assert.deepEqual(state.results[0], { id: 'power_on', kind: 'buyer', result: 'unverified', attempts: 0 });
+  assert.ok(!h.vision.calls.some(c => c.name === 'check' && c.args.challenge_id === 'power_on'));
+  assert.equal(state.results.length, 3); // the call goes on
+});
+test('flow: "ready" makes the agent look right away', async () => {
+  const h = harness({ commands: ['ready'], clockStep: 4000 });
+  let promptEnd = null, firstLook = null;
+  const say = h.deps.say, check = h.deps.vision.check;
+  h.deps.say = async text => { await say(text); if (text.startsWith('Turn it on')) promptEnd = h.clock(); };
+  h.deps.vision.check = async b => { firstLook ??= h.clock(); return check(b); };
+  await runCall(h.deps);
+  assert.equal(firstLook, promptEnd);
+});
+test('flow: "again" repeats the task out loud, then looks', async () => {
+  const h = harness({ commands: ['again'] });
+  const state = await runCall(h.deps);
+  assert.equal(h.said.filter(s => s.startsWith('Turn it on')).length, 2);
+  assert.equal(state.results[0].result, 'passed');
+});
+test('flow: a skip after a failed try keeps it failed, never passed', async () => {
+  const h = harness({ results: { power_on: 'failed' }, commands: [null, 'skip'] });
+  const state = await runCall(h.deps);
+  assert.deepEqual(state.results[0], { id: 'power_on', kind: 'buyer', result: 'failed', attempts: 1 });
+});
+test('flow: the intro tells the seller the voice commands once', async () => {
+  const h = harness();
+  await runCall(h.deps);
+  assert.equal(h.said.filter(s => /skip/i.test(s) && /again/i.test(s)).length, 1);
 });
 test('flow: checks run in a sensible order (catalog order, liveness last)', async () => {
   const h = harness();

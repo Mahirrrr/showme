@@ -58,6 +58,8 @@ export function hintFor(verdict, max = 100) {
 
 export async function runCall(deps, limits = LIMITS) {
   const { say, show, listenForCode, grabFrames, vision, sleep, now, log = () => {}, catalog } = deps;
+  // A pause the seller can cut short by voice: resolves with "skip" | "again" | "ready", or null after ms.
+  const pause = async ms => (deps.waitForCommand ? deps.waitForCommand(ms) : (await sleep(ms), null));
   const startedAt = now();
   const timeLeft = () => limits.callBudgetMs - (now() - startedAt);
   const state = { request: null, results: [], finished: false };
@@ -87,7 +89,7 @@ export async function runCall(deps, limits = LIMITS) {
   // 2. Start: the buyer's tests plus the secret liveness challenges, in an order that makes sense.
   const { challenges: raw } = await vision.start(request.request_id);
   const challenges = orderChallenges(raw, catalog);
-  await say(`Thanks. ${challenges.length} quick checks. Keep the ${request.item_name} in view.`);
+  await say(`Thanks. ${challenges.length} quick checks. Keep the ${request.item_name} in view. Say skip or again anytime.`);
 
   // 3. Each challenge: say it once, then look for up to 30 s. Retries are silent; the card says what's wrong.
   let nudged = false;
@@ -97,16 +99,20 @@ export async function runCall(deps, limits = LIMITS) {
     const card = { step: i + 1, total: challenges.length, title: request.item_name, prompt: ch.prompt };
     show({ ...card, status: 'waiting' });
     const shownAt = now(), deadline = shownAt + limits.checkWindowMs; // the window opens with the card, not after the speech
+    deps.clearCommands?.(); // nothing said before this task counts for it
     await say(spoken(ch.prompt));
-    await sleep(limits.actMs);
+    let command = await pause(limits.actMs);
     let attempt = 0, last = null;
     while (attempt < limits.maxAttempts && now() < deadline) {
+      if (command === 'skip') { log(`[flow] check ${i + 1} skipped by the seller`); break; }
+      if (command === 'again') { await say(spoken(ch.prompt)); command = await pause(limits.actMs); continue; }
+      command = null; // "ready" (or nothing): look now
       // The contract wants 2 to 4 frames; fewer counts as no frames (vision would reject it with a 422).
       const grabbed = grabFrames();
       if (grabbed.length < 2) {
         show({ ...card, status: 'waiting', note: "I can't see it. Point the camera at the item." });
         if (!nudged) { nudged = true; await say("I can't see anything. Point the camera at the item."); }
-        await sleep(limits.noFrameRetryMs);
+        command = await pause(limits.noFrameRetryMs);
         continue;
       }
       attempt++;
@@ -122,7 +128,7 @@ export async function runCall(deps, limits = LIMITS) {
       if (last.result === 'passed') break;
       if (attempt < limits.maxAttempts && now() < deadline) {
         show({ ...card, status: 'waiting', note: hintFor(last) });
-        await sleep(limits.retryGapMs);
+        command = await pause(limits.retryGapMs);
       }
     }
     const result = last?.result ?? 'unverified';

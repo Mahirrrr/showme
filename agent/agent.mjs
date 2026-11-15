@@ -14,7 +14,7 @@ import * as openai from '@livekit/agents-plugin-openai';
 import { LocalVideoTrack, TrackSource, VideoBufferType, VideoFrame, VideoSource } from '@livekit/rtc-node';
 import { FPS, HEIGHT, WIDTH, renderCard, withPulse } from './card.mjs';
 import { runAgent } from './chert-rooms.mjs';
-import { makeCodeListener, parseCode } from './code.mjs';
+import { makeCodeListener, parseCode, makeCommandListener, parseCommand } from './code.mjs';
 import { runCall } from './flow.mjs';
 import { FrameBuffer, attachCallerVideo, toJpegBase64, makeCallerEncoder } from './frames.mjs';
 import catalog from '../shared/tests.json' with { type: 'json' }; // test order for the call (flow.orderChallenges)
@@ -73,7 +73,7 @@ const agent = defineAgent({
         tts: new openai.TTS({ model: 'gpt-4o-mini-tts', voice: 'coral' }),
       }
       : {
-        stt: new google.beta.GeminiSTT({ language: 'en-US', customVocabulary: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] }),
+        stt: new google.beta.GeminiSTT({ language: 'en-US', customVocabulary: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'skip', 'again', 'ready'] }),
         tts: new elevenlabs.TTS({
           apiKey: process.env.ELEVENLABS_API_KEY,
           voiceId: process.env.ELEVENLABS_VOICE_ID || undefined,
@@ -83,11 +83,14 @@ const agent = defineAgent({
         }),
       });
     const codes = makeCodeListener();
+    const commands = makeCommandListener(); // "skip" / "again" / "ready": FaceTime can't send taps
     session.on(voice.AgentSessionEventTypes.UserInputTranscribed, ev => {
       if (!ev.isFinal) return;
       console.log(`[stt] ${ev.transcript}`);
       const code = parseCode(ev.transcript);
       if (code) codes.heard(code);
+      const command = parseCommand(ev.transcript);
+      if (command) { console.log(`[cmd] ${command}`); commands.heard(command); }
     });
     const listenForCode = ms => codes.listen(ms);
 
@@ -116,6 +119,8 @@ const agent = defineAgent({
       say: text => { console.log(`[say] ${text}`); return session.say(text, { allowInterruptions: false }).waitForPlayout(); },
       show: c => { console.log(`[card] ${c.status ?? ''} ${c.prompt ?? ''}`); show(c); },
       listenForCode,
+      waitForCommand: ms => commands.wait(ms),
+      clearCommands: () => commands.clear(),
       grabFrames: () => {
         const raw = buffer.recent(2000, 4);
         const frames = raw.map(encodeCallerFrame).filter(Boolean);

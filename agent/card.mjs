@@ -21,7 +21,9 @@ const BG = {
 };
 const MARBLE = '#F4F1EA';
 const VERDICT = { passed: 'Passed', failed: 'Failed', unverified: 'Unclear' };
-const FOOTER = { waiting: 'SHOW IT TO THE CAMERA', checking: 'THE ORACLE LOOKS…' };
+// The seller can't tap FaceTime, so the waiting card lists the voice commands (code.parseCommand).
+const COMMANDS_LINE = 'SAY “READY” · “AGAIN” · “SKIP”';
+const FOOTER = { waiting: COMMANDS_LINE, checking: 'THE ORACLE LOOKS…' };
 const SERIF = 'Baskerville, Georgia, serif';
 const DISPLAY = 'Didot, Baskerville, Georgia, serif';
 
@@ -102,6 +104,7 @@ export function renderCard({ step, total, title = '', prompt = '', status = 'inf
     g.font = `italic 32px ${SERIF}`;
     wrapText(prompt, maxW, measure).slice(0, 4).forEach(l => { g.fillText(l, M, y); y += 40; });
     g.globalAlpha = 1;
+    if (status === 'waiting') { g.font = `24px ${DISPLAY}`; g.fillText(COMMANDS_LINE, M, Math.max(y + 30, 960)); }
   } else {
     g.font = `68px ${SERIF}`;
     const lines = wrapText(prompt, maxW, measure).slice(0, 6), lh = 76;
